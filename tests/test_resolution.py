@@ -26,10 +26,13 @@ from au_weather_mcp.resolution import (
 # ---------- internal helpers ----------
 
 class _FakeClient:
-    """Stub OpenMeteoClient with a programmable .geocode_au()."""
-    def __init__(self, geocode_response=None):
+    """Stub OpenMeteoClient with programmable .geocode_au() and
+    .geocode_postcode_au()."""
+    def __init__(self, geocode_response=None, postcode_response=None):
         self._geocode = AsyncMock(return_value=geocode_response or [])
+        self._postcode = AsyncMock(return_value=postcode_response)
         self.geocode_au = self._geocode
+        self.geocode_postcode_au = self._postcode
 
 
 # ---------- _normalize_to_curated_key ----------
@@ -269,6 +272,86 @@ async def test_resolve_priority_state_over_geocode():
     assert r.source == "state_alias"
 
 
+# ---------- postcode resolution ----------
+
+async def test_resolve_postcode_via_nominatim():
+    """4-digit postcode should route to Nominatim, not Open-Meteo geocoder."""
+    nominatim_response = {
+        "lat": "-33.8884334",
+        "lon": "151.2700666",
+        "display_name": "2026, Bondi Beach, Waverley Council, New South Wales, 2026, Australia",
+        "address": {
+            "suburb": "Bondi Beach",
+            "state": "New South Wales",
+        },
+    }
+    c = _FakeClient(postcode_response=nominatim_response)
+    r = await resolve_location(c, "2026")
+    assert r.source == "postcode"
+    assert r.name == "Bondi Beach"
+    assert r.state == "New South Wales"
+    assert abs(r.latitude - -33.8884334) < 0.001
+    assert r.timezone == "Australia/Sydney"  # 151°E → NSW/VIC/QLD/TAS zone
+    c._postcode.assert_called_once_with("2026")
+    # Postcode took priority — no Open-Meteo geocode call
+    c._geocode.assert_not_called()
+
+
+async def test_resolve_postcode_no_address_falls_back_to_display_name():
+    """Some Nominatim responses don't have address.suburb but display_name
+    always works."""
+    nominatim_response = {
+        "lat": "-27.466",
+        "lon": "153.024",
+        "display_name": "4000, Brisbane City, Brisbane, Queensland, Australia",
+        # no `address` dict
+    }
+    c = _FakeClient(postcode_response=nominatim_response)
+    r = await resolve_location(c, "4000")
+    assert r.source == "postcode"
+    assert r.name == "Brisbane City"  # parsed from display_name
+    assert r.state == "Queensland"
+    assert r.timezone == "Australia/Brisbane"
+
+
+async def test_resolve_postcode_nominatim_returns_nothing_falls_through():
+    """If Nominatim has no result for a 4-digit numeric, we should fall
+    through to the Open-Meteo geocoder rather than erroring."""
+    om_response = [{
+        "name": "Some Place", "country_code": "AU", "admin1": "NSW",
+        "latitude": -33.0, "longitude": 150.0, "timezone": "Australia/Sydney",
+    }]
+    c = _FakeClient(postcode_response=None, geocode_response=om_response)
+    r = await resolve_location(c, "9999")
+    # Fell through to Open-Meteo
+    assert r.source == "geocoded"
+    c._postcode.assert_called_once()
+    c._geocode.assert_called_once()
+
+
+async def test_resolve_non_postcode_skips_nominatim():
+    """A 3-digit or 5-digit numeric is not a postcode — skip Nominatim."""
+    c = _FakeClient()
+    with pytest.raises(ValueError):
+        # Will raise because no resolution path matches
+        await resolve_location(c, "12345")
+    c._postcode.assert_not_called()
+
+
+async def test_resolve_postcode_unparseable_lat_returns_none():
+    """If Nominatim returns garbage lat/lng, postcode stage returns None and
+    we fall through to Open-Meteo."""
+    bad_response = {"lat": "not_a_number", "lon": "0", "display_name": "x"}
+    om_response = [{
+        "name": "Fallback", "country_code": "AU",
+        "latitude": -34.0, "longitude": 151.0, "timezone": "Australia/Sydney",
+    }]
+    c = _FakeClient(postcode_response=bad_response, geocode_response=om_response)
+    r = await resolve_location(c, "2026")
+    # Should have fallen through to Open-Meteo
+    assert r.source == "geocoded"
+
+
 # ---------- live geocoding tests (network) ----------
 
 pytestmark_live = pytest.mark.live
@@ -293,6 +376,90 @@ async def test_live_geocode_byron_bay():
         assert r.timezone == "Australia/Sydney"
     finally:
         await client.aclose()
+
+
+@pytest.mark.live
+async def test_live_postcode_2026_resolves_to_bondi_beach():
+    """End-to-end Nominatim test for the canonical Bondi Beach postcode."""
+    from au_weather_mcp.cache import Cache
+    from au_weather_mcp.client import OpenMeteoClient
+    from pathlib import Path
+    import tempfile
+    tmp = Path(tempfile.mkdtemp())
+    client = OpenMeteoClient(cache=Cache(tmp / "cache.db"))
+    try:
+        r = await resolve_location(client, "2026")
+        assert r.source == "postcode"
+        # Bondi Beach is approximately -33.89, 151.27
+        assert -34.0 < r.latitude < -33.8
+        assert 151.2 < r.longitude < 151.3
+        assert r.state == "New South Wales"
+        assert "Bondi" in r.name
+        assert r.timezone == "Australia/Sydney"
+    finally:
+        await client.aclose()
+
+
+def test_postcode_attribution_includes_osm():
+    """When the location resolves via postcode, OSM attribution must appear
+    in the response envelope — required by Nominatim's ODbL licence.
+
+    Unit test (not live) — exercises shaping.build_response with a
+    postcode-source ResolvedLocation directly. The live equivalent runs
+    via the test_live_postcode_2026_resolves_to_bondi_beach test above."""
+    from au_weather_mcp.resolution import ResolvedLocation
+    from au_weather_mcp.shaping import build_response
+    bondi = ResolvedLocation(
+        name="Bondi Beach",
+        state="New South Wales",
+        country="Australia",
+        latitude=-33.8884,
+        longitude=151.2701,
+        timezone="Australia/Sydney",
+        elevation_m=None,
+        curated_id=None,
+        source="postcode",
+        original_input="2026",
+    )
+    payload = {"current": {"time": "2026-05-12T11:00", "temperature_2m": 19.0}}
+    resp = build_response(
+        location=bondi,
+        payload=payload,
+        source_url="https://api.open-meteo.com/v1/forecast?example=1",
+        user_query={"location": "2026"},
+    )
+    assert resp.location_resolution == "postcode"
+    assert "OpenStreetMap" in resp.attribution
+    assert "ODbL" in resp.attribution
+    # The base Open-Meteo + BOM attribution must still be present alongside
+    assert "Open-Meteo" in resp.attribution
+    assert "Bureau of Meteorology" in resp.attribution
+
+
+def test_non_postcode_attribution_omits_osm():
+    """Curated responses must NOT include OSM attribution — we didn't use OSM."""
+    from au_weather_mcp.resolution import ResolvedLocation
+    from au_weather_mcp.shaping import build_response
+    syd = ResolvedLocation(
+        name="Sydney",
+        state="NSW",
+        country="Australia",
+        latitude=-33.86,
+        longitude=151.21,
+        timezone="Australia/Sydney",
+        elevation_m=39,
+        curated_id="sydney",
+        source="curated",
+        original_input="sydney",
+    )
+    payload = {"current": {"time": "2026-05-12T11:00", "temperature_2m": 19.0}}
+    resp = build_response(
+        location=syd, payload=payload,
+        source_url="https://example.com",
+        user_query={"location": "sydney"},
+    )
+    assert "OpenStreetMap" not in resp.attribution
+    assert "ODbL" not in resp.attribution
 
 
 @pytest.mark.live

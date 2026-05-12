@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.0 (2026-05-12)
+
+**Postcode support** — 4-digit AU postcodes now resolve via OpenStreetMap
+Nominatim. Closes the gap flagged in 0.2.0's "known limitations" — agents
+can now answer "what's the weather at 2026?" with Bondi Beach data.
+
+- **AU postcode resolution stage** sits between the fuzzy-curated check
+  and Open-Meteo geocoding. Triggered when input matches `^\d{4}$`.
+  Uses Nominatim's structured `postalcode=` query (filtered to
+  `country=Australia`) to get the canonical suburb + lat/lng.
+- **Why Nominatim and not Open-Meteo's geocoder for postcodes?**
+  Open-Meteo's geocoder returns European cities for AU 4-digit numerics
+  ('2000' → Antwerp, '3000' → Bern). Nominatim handles postcodes
+  correctly across countries. We use it ONLY for postcodes to keep the
+  Nominatim request footprint minimal and respect their 1 req/sec TOS.
+- **State-based timezone** for postcode-resolved locations. The
+  longitude-only heuristic was wrong at the QLD/NSW border (both around
+  153°E). Now: state → IANA timezone map for known states, longitude
+  heuristic only as ultimate fallback for raw lat/lng.
+- **OSM attribution baked into the response when Nominatim was used**.
+  Nominatim's ODbL licence requires attribution to travel with the data.
+  When `location_resolution == 'postcode'`, the response's `attribution`
+  field appends "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright".
+  Non-postcode responses are unchanged (still Open-Meteo + BOM only).
+- **Cache TTL**: 7 days (`metadata` kind). Postcode boundaries are stable.
+- **`postcode`** added to the `location_resolution` source enum.
+
+Customer-typed inputs that now resolve:
+
+| Input | Resolves to |
+|---|---|
+| `"2026"` | Bondi Beach, NSW |
+| `"3000"` | Melbourne, VIC |
+| `"4217"` | Southport (Gold Coast), QLD |
+| `"6160"` | Fremantle, WA |
+| `"7000"` | Hobart, TAS |
+| `"0800"` | Darwin, NT |
+
+- **+7 regression tests** for postcode resolution (5 unit + 2 live).
+  Total: 96 unit + 11 live = 107 tests. Live test for Bondi Beach (2026)
+  passes end-to-end against the real Nominatim API.
+
 ## 0.2.0 (2026-05-12)
 
 **Compatibility release** — the `location` parameter now accepts almost

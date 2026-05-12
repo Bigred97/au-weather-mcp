@@ -203,6 +203,20 @@ def build_response(
             start_period = start_period or current_obs.time
             end_period = end_period or current_obs.time
 
+    # Attribution adapts to what we actually used. Default covers
+    # Open-Meteo + BOM. When the location was resolved via Nominatim
+    # (postcode lookup), OSM attribution is required by their ODbL licence.
+    attribution = (
+        "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under "
+        "CC BY 4.0. Underlying data includes the Australian Bureau of Meteorology "
+        "(https://www.bom.gov.au) under Open-Meteo's licensing arrangement."
+    )
+    if location.source == "postcode":
+        attribution += (
+            " Postcode geocoding by © OpenStreetMap contributors, licensed "
+            "under the Open Database Licence (ODbL) — https://www.openstreetmap.org/copyright."
+        )
+
     return WeatherResponse(
         location_id=location.curated_id,
         location_name=location.name,
@@ -217,6 +231,7 @@ def build_response(
         current=current_obs,
         hourly=hourly_obs,
         daily=daily_obs,
+        attribution=attribution,
         source_url=source_url,
         retrieved_at=datetime.now(timezone.utc),
         server_version=__version__,

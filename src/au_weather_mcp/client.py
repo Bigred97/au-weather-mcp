@@ -29,6 +29,10 @@ from .cache import TTL, Cache, CacheKind
 FORECAST_BASE = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_BASE = "https://archive-api.open-meteo.com/v1/archive"
 GEOCODING_BASE = "https://geocoding-api.open-meteo.com/v1/search"
+# Nominatim is used as a fallback for AU postcodes (Open-Meteo's geocoder
+# returns European cities for 4-digit numerics). Their TOS requires an
+# identifying User-Agent and a max of 1 req/sec; cached aggressively.
+NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
@@ -63,7 +67,7 @@ class OpenMeteoClient:
     async def __aexit__(self, *exc: Any) -> None:
         await self.aclose()
 
-    async def _fetch(self, url: str, kind: CacheKind) -> dict[str, Any]:
+    async def _fetch(self, url: str, kind: CacheKind) -> Any:
         cached = await self.cache.get(url, ttl=TTL[kind])
         if cached is not None:
             try:
@@ -135,6 +139,49 @@ class OpenMeteoClient:
             params["end_date"] = end_date
         url = f"{FORECAST_BASE}?{urlencode(params)}"
         return await self._fetch(url, kind=kind)
+
+    async def geocode_postcode_au(self, postcode: str) -> dict[str, Any] | None:
+        """Resolve a 4-digit Australian postcode to lat/lng + suburb via
+        OpenStreetMap's Nominatim service.
+
+        Open-Meteo's geocoder doesn't understand AU postcodes — querying
+        '2026' returns Antwerp, Belgium. Nominatim does. We use Nominatim
+        only for postcodes (everything else stays on Open-Meteo) to keep
+        the rate-limit footprint tiny and respect Nominatim's TOS.
+
+        Returns None if no result. The caller must handle the None case
+        (typically by falling through to Open-Meteo's geocoder or raising
+        an actionable error).
+
+        Caches as 'metadata' kind (7-day TTL) — postcode boundaries are
+        stable on a multi-month timescale.
+
+        Attribution: when the response is used, the calling code must
+        surface OpenStreetMap attribution ('© OpenStreetMap contributors,
+        ODbL 1.0') in the response envelope.
+        """
+        params = {
+            "postalcode": postcode,
+            "country": "Australia",
+            "format": "json",
+            "limit": 1,
+            "addressdetails": 1,
+        }
+        url = f"{NOMINATIM_BASE}?{urlencode(params)}"
+        # Nominatim requires the standard User-Agent header (already set on
+        # self._http) but they also recommend distinct identification per
+        # tool — we use the package-level UA which carries our GitHub URL.
+        try:
+            data = await self._fetch(url, kind="metadata")
+        except OpenMeteoError as e:
+            # If Nominatim is unreachable/throttled, return None and let the
+            # caller decide whether to fall back or surface an error.
+            return None
+        # Nominatim returns a JSON array, not an object. _fetch parses it as
+        # JSON but the cache layer + json.loads handle both shapes fine.
+        if isinstance(data, list):
+            return data[0] if data else None
+        return None
 
     async def geocode_au(
         self,

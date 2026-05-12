@@ -110,6 +110,7 @@ The `location` parameter on every tool resolves six different input shapes — a
 | Place name, any case | `"Sydney"`, `"Gold Coast"`, `"GOLD COAST"` | Normalised curated lookup |
 | State code or full name | `"NSW"`, `"Queensland"`, `"Western Australia"` | State → capital alias |
 | Raw coordinates | `"-33.87,151.21"` | Direct lat/lng (AU bbox enforced) |
+| **AU postcode** | `"2026"` (Bondi Beach), `"4217"` (Gold Coast), `"6160"` (Fremantle) | **OpenStreetMap Nominatim** |
 | Any AU place name | `"Byron Bay"`, `"Margaret River"`, `"Toowoomba"` | Open-Meteo geocoding (AU-filtered, population-sorted) |
 | Typo of a curated name | `"Sydny"`, `"Melbourn"` | High-confidence fuzzy match |
 
@@ -244,7 +245,11 @@ The four packages run side-by-side in any MCP client; Claude disambiguates via t
 
 ## Data attribution
 
-Weather data is provided by [Open-Meteo](https://open-meteo.com), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The underlying observations include data from the [Australian Bureau of Meteorology](https://www.bom.gov.au) under Open-Meteo's licensing arrangement. Every `WeatherResponse` from this server includes the full attribution string. If you redistribute responses, credit both Open-Meteo and the BOM.
+Weather data is provided by [Open-Meteo](https://open-meteo.com), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The underlying observations include data from the [Australian Bureau of Meteorology](https://www.bom.gov.au) under Open-Meteo's licensing arrangement.
+
+**Postcode resolutions** (when `location_resolution == "postcode"`) additionally use [OpenStreetMap](https://www.openstreetmap.org/copyright) via the Nominatim service, licensed under the [Open Database Licence (ODbL)](https://opendatacommons.org/licenses/odbl/). The OSM attribution is automatically appended to the response's `attribution` field for any postcode lookup, so redistribution is licence-compliant out of the box.
+
+If you redistribute responses, credit Open-Meteo + BOM (always) and OpenStreetMap (when postcode lookup was used).
 
 ## Changelog
 

@@ -27,6 +27,11 @@ from .curated import CuratedLocation
 _LAT_LNG_PATTERN = re.compile(
     r"^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$"
 )
+# AU postcode: exactly 4 digits. Leading zeros valid (NT/ACT use 0xxx and 2xxx
+# respectively). Range is 0200-9999 in practice but we don't validate the
+# range — Nominatim is the authority and will return no result for invalid
+# postcodes.
+_POSTCODE_PATTERN = re.compile(r"^\d{4}$")
 
 # Australia bounding box (generous — covers all states + territorial waters)
 AU_LAT_MIN, AU_LAT_MAX = -45.0, -9.0
@@ -58,15 +63,30 @@ STATE_TO_CAPITAL: dict[str, str] = {
     "AU": "sydney",
 }
 
+# State / territory → IANA timezone. Authoritative for postcode resolutions
+# where we know the state. NT and SA both use Australian Central Standard
+# Time (UTC+9:30) but observe DST differently — SA does, NT doesn't.
+_STATE_TO_TZ: dict[str, str] = {
+    "New South Wales": "Australia/Sydney",
+    "Victoria": "Australia/Melbourne",
+    "Queensland": "Australia/Brisbane",
+    "Western Australia": "Australia/Perth",
+    "South Australia": "Australia/Adelaide",
+    "Tasmania": "Australia/Hobart",
+    "Northern Territory": "Australia/Darwin",
+    "Australian Capital Territory": "Australia/Sydney",
+}
+
 # Rough longitude-based timezone fallback for raw lat/lng input when we
-# don't have a geocoded timezone. Open-Meteo accepts 'auto' which is what
-# we actually use — this map is only for the response metadata.
+# don't know the state. Open-Meteo accepts 'auto' which is what we actually
+# use for the weather call — this map is only for the response metadata.
+# NOTE: imprecise at QLD/NSW border (both around 153°E). If you have a
+# state name, prefer _STATE_TO_TZ.
 _LON_TO_TZ = [
     (129.0, "Australia/Perth"),    # WA
     (138.5, "Australia/Darwin"),   # NT (no DST)
     (141.0, "Australia/Adelaide"), # SA
-    (146.0, "Australia/Brisbane"), # QLD (no DST) — straddle with NSW
-    (180.0, "Australia/Sydney"),   # NSW/VIC/TAS/ACT
+    (180.0, "Australia/Sydney"),   # most-asked east-coast zone
 ]
 
 
@@ -83,6 +103,7 @@ class ResolvedLocation:
       - "curated"          — exact or normalised match against curated YAML
       - "state_alias"      — state code / name resolved to a capital
       - "raw_coordinates"  — user supplied "lat,lng"
+      - "postcode"         — 4-digit AU postcode resolved via OSM Nominatim
       - "geocoded"         — Open-Meteo geocoding API
       - "fuzzy_curated"    — typo or near-miss resolved against curated set
     """
@@ -208,6 +229,83 @@ def _try_fuzzy_curated(s: str, original: str, min_score: float = 85.0) -> Resolv
     return _from_curated(top, source="fuzzy_curated", original_input=original)
 
 
+def _parse_state_from_display_name(display_name: str) -> str | None:
+    """Nominatim returns 'display_name' like
+    '2026, Bondi Beach, Waverley Council, New South Wales, 2026, Australia'.
+    The state is the second-to-last comma-separated token before 'Australia'.
+    Returns None if we can't parse it confidently."""
+    if not display_name:
+        return None
+    parts = [p.strip() for p in display_name.split(",")]
+    # Walk from the end: skip 'Australia' and any trailing postcode token,
+    # the next non-trivial token is the state.
+    au_states = {
+        "New South Wales", "Victoria", "Queensland", "Western Australia",
+        "South Australia", "Tasmania", "Northern Territory",
+        "Australian Capital Territory",
+    }
+    for p in reversed(parts):
+        if p in au_states:
+            return p
+    return None
+
+
+def _parse_suburb_from_nominatim(entry: dict) -> str:
+    """Extract a useful place name from a Nominatim entry. Prefers structured
+    address.suburb / town / city, falls back to the first display_name token
+    (which for postcode queries is usually 'Suburb Name')."""
+    addr = entry.get("address") or {}
+    for key in ("suburb", "town", "city", "village", "hamlet", "locality"):
+        if addr.get(key):
+            return str(addr[key])
+    display = entry.get("display_name") or ""
+    if display:
+        parts = [p.strip() for p in display.split(",")]
+        # First token is often the postcode itself; second token is the suburb.
+        if len(parts) >= 2 and parts[0].isdigit():
+            return parts[1]
+        if parts:
+            return parts[0]
+    return "Unknown"
+
+
+async def _try_postcode(client, s: str, original: str) -> ResolvedLocation | None:
+    """If `s` is a 4-digit AU postcode, resolve via OSM Nominatim. Returns
+    None if not a postcode shape OR if Nominatim returns no result (caller
+    falls through to the Open-Meteo geocoder)."""
+    if not _POSTCODE_PATTERN.match(s):
+        return None
+    entry = await client.geocode_postcode_au(s)
+    if not entry:
+        return None
+    try:
+        lat = float(entry["lat"])
+        lng = float(entry["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    name = _parse_suburb_from_nominatim(entry)
+    state = entry.get("address", {}).get("state") or _parse_state_from_display_name(
+        entry.get("display_name") or ""
+    )
+    # Prefer state-based timezone (authoritative) over the longitude
+    # heuristic, which is wrong on the QLD/NSW border.
+    tz = _STATE_TO_TZ.get(state) if state else None
+    if tz is None:
+        tz = _longitude_to_tz(lng)
+    return ResolvedLocation(
+        name=name,
+        state=state,
+        country="Australia",
+        latitude=lat,
+        longitude=lng,
+        timezone=tz,
+        elevation_m=None,  # Nominatim doesn't return elevation
+        curated_id=None,
+        source="postcode",
+        original_input=original,
+    )
+
+
 async def resolve_location(client, location_input: str) -> ResolvedLocation:
     """Main entry: resolve any reasonable customer input to a ResolvedLocation.
 
@@ -216,8 +314,9 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
       1. raw "lat,lng" coordinates
       2. exact curated id or normalised case-folded form
       3. state code or full state name → capital
-      4. high-confidence fuzzy match against curated set (catches typos)
-      5. Open-Meteo geocoding API (filtered to AU, sorted by population)
+      4. 4-digit AU postcode via OSM Nominatim
+      5. high-confidence fuzzy match against curated set (catches typos)
+      6. Open-Meteo geocoding API (filtered to AU, sorted by population)
 
     Raises ValueError with an actionable hint if nothing matches.
     """
@@ -229,8 +328,8 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
     if not s:
         raise ValueError(
             "location is empty. Try a curated ID like 'sydney', a state code "
-            "like 'NSW', a place name like 'Bondi Beach', or coordinates like "
-            "'-33.87,151.21'."
+            "like 'NSW', a postcode like '2026', a place name like 'Bondi Beach', "
+            "or coordinates like '-33.87,151.21'."
         )
 
     # 1. lat/lng
@@ -248,12 +347,17 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
     if state is not None:
         return state
 
-    # 4. high-confidence fuzzy curated (catches Sydny → sydney, with score gate)
+    # 4. AU postcode via Nominatim
+    postcode = await _try_postcode(client, s, original=location_input)
+    if postcode is not None:
+        return postcode
+
+    # 5. high-confidence fuzzy curated (catches Sydny → sydney, with score gate)
     fuzzy = _try_fuzzy_curated(s, original=location_input)
     if fuzzy is not None:
         return fuzzy
 
-    # 5. geocode via Open-Meteo (AU-filtered, population-sorted)
+    # 6. geocode via Open-Meteo (AU-filtered, population-sorted)
     candidates = await client.geocode_au(s, count=5)
     if candidates:
         best = candidates[0]
@@ -274,8 +378,8 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
     suggestions = [m.id for m in curated_mod.search(s, limit=5)]
     raise ValueError(
         f"Could not resolve location {location_input!r}. "
-        f"Tried curated set, state codes, coordinates, and geocoding. "
+        f"Tried curated set, state codes, postcodes, coordinates, and geocoding. "
         f"Did you mean: {', '.join(suggestions)}? "
-        "Other accepted shapes: 'NSW' (state code), '-33.87,151.21' (coordinates), "
-        "or a well-known AU place name like 'Margaret River' or 'Byron Bay'."
+        "Other accepted shapes: 'NSW' (state code), '2026' (AU postcode), "
+        "'-33.87,151.21' (coordinates), or a place name like 'Margaret River'."
     )
