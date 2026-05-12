@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.3 (2026-05-12)
+
+**Iter-3 audit hygiene fix** — closes the last item flagged by the code-
+review agent. Adversarial probe and trust audit both clean.
+
+- Client User-Agent now reads `__version__` from `importlib.metadata`
+  instead of a hardcoded string. The previous `au-weather-mcp/0.1.0`
+  literal drifted on every release; upstream abuse-triage or
+  rate-limit alerts at Open-Meteo / Nominatim would point at code
+  that no longer exists. Now: every HTTP request to either provider
+  carries the exact wheel version that made the call.
+
+No behavioural change for customers. 111 tests still green.
+
 ## 0.3.2 (2026-05-12)
 
 **Iter-2 audit micro-refactors** — zero customer-visible bugs surfaced

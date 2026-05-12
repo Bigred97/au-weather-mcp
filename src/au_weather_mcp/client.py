@@ -24,6 +24,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from . import __version__
 from .cache import TTL, Cache, CacheKind
 
 FORECAST_BASE = "https://api.open-meteo.com/v1/forecast"
@@ -49,11 +50,18 @@ class OpenMeteoClient:
         self.cache = cache or Cache()
         # Identify honestly. Open-Meteo doesn't block on UA — unlike BOM —
         # but identifying lets them contact us if we ever misbehave.
+        # User-Agent carries the actual running version so upstream abuse-
+        # triage / rate-limit logs at Open-Meteo or Nominatim point at the
+        # exact wheel that made the call. Avoids the "stale 0.1.0 string"
+        # drift problem on every patch release.
         self._http = httpx.AsyncClient(
             timeout=DEFAULT_TIMEOUT,
             transport=transport,
             headers={
-                "User-Agent": "au-weather-mcp/0.1.0 (+https://github.com/Bigred97/au-weather-mcp)",
+                "User-Agent": (
+                    f"au-weather-mcp/{__version__} "
+                    "(+https://github.com/Bigred97/au-weather-mcp)"
+                ),
                 "Accept": "application/json",
             },
         )
