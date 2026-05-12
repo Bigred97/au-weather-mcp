@@ -173,7 +173,7 @@ class OpenMeteoClient:
         # tool — we use the package-level UA which carries our GitHub URL.
         try:
             data = await self._fetch(url, kind="metadata")
-        except OpenMeteoError as e:
+        except OpenMeteoError:
             # If Nominatim is unreachable/throttled, return None and let the
             # caller decide whether to fall back or surface an error.
             return None

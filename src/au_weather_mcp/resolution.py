@@ -283,6 +283,20 @@ async def _try_postcode(client, s: str, original: str) -> ResolvedLocation | Non
         lng = float(entry["lon"])
     except (KeyError, TypeError, ValueError):
         return None
+    # The Nominatim path was bypassing the AU bbox guard that lat/lng input
+    # enforces — Norfolk Island postcode 2899 resolved at 167.95°E (outside
+    # the 110–156 bbox) and the wrapper happily served weather. Apply the
+    # same bbox rule here so the scope contract holds across all resolution
+    # paths. (Caveat: AU external territories like Norfolk, Christmas, Cocos
+    # are intentionally excluded — we serve the AU mainland + Tasmania.)
+    if not (AU_LAT_MIN <= lat <= AU_LAT_MAX and AU_LNG_MIN <= lng <= AU_LNG_MAX):
+        raise ValueError(
+            f"Postcode {s!r} resolved to ({lat:.2f}, {lng:.2f}), which is "
+            f"outside the Australia bounding box ({AU_LAT_MIN}..{AU_LAT_MAX} lat, "
+            f"{AU_LNG_MIN}..{AU_LNG_MAX} lng). au-weather-mcp covers the AU "
+            "mainland and Tasmania; external territories (Norfolk Island, "
+            "Christmas Island, Cocos Islands) are not in scope."
+        )
     name = _parse_suburb_from_nominatim(entry)
     state = entry.get("address", {}).get("state") or _parse_state_from_display_name(
         entry.get("display_name") or ""

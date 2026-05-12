@@ -108,6 +108,56 @@ async def test_describe_state_code_returns_capital():
     assert detail.state == "NSW"
 
 
+@pytest.mark.live
+async def test_describe_location_geocoded_returns_id_none():
+    """REGRESSION (iter-1 audit): describe_location used to crash with a
+    pydantic ValidationError on every non-curated input because LocationDetail.id
+    was non-nullable. Geocoded places must return id=None, not crash."""
+    detail = await server.describe_location("Margaret River")
+    assert detail.id is None
+    assert "Margaret River" in detail.name
+    assert detail.state == "Western Australia"
+    assert detail.latitude is not None
+    assert detail.longitude is not None
+    # Attribution must still be populated
+    assert "CC BY 4.0" in detail.attribution
+
+
+@pytest.mark.live
+async def test_describe_location_raw_coordinates_returns_id_none():
+    """REGRESSION (iter-1 audit): raw lat/lng input should return id=None,
+    not crash."""
+    detail = await server.describe_location("-33.87,151.21")
+    assert detail.id is None
+    # name is just the coords-formatted string for raw-coord lookups
+    assert "(-33" in detail.name
+
+
+@pytest.mark.live
+async def test_describe_location_postcode_returns_id_none_with_osm_attribution():
+    """REGRESSION (iter-1 audit): postcode resolution should return id=None
+    and include OSM attribution."""
+    detail = await server.describe_location("2026")
+    assert detail.id is None
+    # Bondi Beach is the canonical 2026 suburb
+    assert "Bondi" in detail.name
+    assert detail.state == "New South Wales"
+
+
+@pytest.mark.live
+async def test_postcode_outside_au_bbox_is_rejected():
+    """REGRESSION (iter-1 audit): Norfolk Island postcode 2899 was silently
+    serving weather at (-29.04, 167.95) — outside the declared AU bbox.
+    The bbox check must apply to postcode-resolved locations too."""
+    with pytest.raises(ValueError, match="outside the Australia bounding box"):
+        await server.latest("2899")
+    # Same on describe_location and get_weather
+    with pytest.raises(ValueError, match="outside the Australia bounding box"):
+        await server.describe_location("2899")
+    with pytest.raises(ValueError, match="outside the Australia bounding box"):
+        await server.get_weather("2899")
+
+
 # ---------- latest ----------
 
 async def test_latest_rejects_non_string_location():

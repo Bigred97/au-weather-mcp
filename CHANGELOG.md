@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.3.1 (2026-05-12)
+
+**Iter-1 audit fixes** — two real bugs surfaced by an adversarial probe
+against 0.3.0 + four quality refactors. Code-review audit (Agent B) and
+trust audit (Agent C) confirmed no other issues; this is a focused
+patch release, not a rewrite.
+
+- **Fix: `describe_location` crashed on every non-curated input.**
+  `LocationDetail.id` was non-nullable (`str`) but the server passed
+  `id=resolved.curated_id` which is `None` for postcode, raw-coords,
+  geocoded, and fuzzy-curated paths. Every such call raised
+  `pydantic_core.ValidationError` — a leaked exception type, not the
+  documented `ValueError` contract. Now `id: str | None`, matching
+  `WeatherResponse.location_id`'s nullable semantics. 8 distinct
+  customer-typed inputs that reproduced this in iter-1 audit
+  (Margaret River, 2026, 4870, 3000, raw coords, Wagga Wagga, etc.)
+  now all return `LocationDetail` with `id=None` and full provenance.
+- **Fix: Norfolk Island postcode 2899 bypassed the AU bbox guard.**
+  Nominatim resolves 2899 to (−29.04, 167.95) — longitude 167.95 is
+  outside the declared AU bbox (110–156). An equivalent raw-coord
+  input is correctly rejected, but the postcode path was silently
+  serving weather for an out-of-scope location. The bbox check now
+  runs inside `_try_postcode` too. Norfolk Island, Christmas Island
+  (6798), and Cocos Islands (6799) postcodes now error cleanly:
+  *"…outside the Australia bounding box; au-weather-mcp covers the
+  AU mainland and Tasmania; external territories…not in scope."*
+- **`location_resolution` is now `Literal[…]`** instead of bare `str`,
+  including the previously-missing `"postcode"` value. Adding a new
+  resolution path requires updating the type — Pydantic will reject
+  any unlisted value, catching the "forgot to update the type"
+  mistake at write time rather than ship time.
+- **Single source of truth for attribution strings.** `DEFAULT_ATTRIBUTION`
+  and `OSM_ATTRIBUTION_SUFFIX` constants in `models.py`, imported
+  everywhere. The full string was duplicated in three places before
+  and would drift if licensing wording ever changed.
+- **Cleanup**: collapsed identical `_DEFAULT_CURRENT_VARS` /
+  `_DEFAULT_HOURLY_VARS` lists; dropped unused exception binding
+  in the Nominatim fallback path.
+- **+4 regression tests** locking in both bug fixes. 96 unit + 15 live
+  = 111 total. All green.
+
 ## 0.3.0 (2026-05-12)
 
 **Postcode support** — 4-digit AU postcodes now resolve via OpenStreetMap

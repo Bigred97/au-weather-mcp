@@ -11,7 +11,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import __version__
-from .models import DailyAggregate, WeatherObservation, WeatherResponse
+from .models import (
+    DEFAULT_ATTRIBUTION,
+    OSM_ATTRIBUTION_SUFFIX,
+    DailyAggregate,
+    WeatherObservation,
+    WeatherResponse,
+)
 from .resolution import ResolvedLocation
 
 # WMO weather codes: https://open-meteo.com/en/docs (and WMO 4677 standard).
@@ -206,16 +212,9 @@ def build_response(
     # Attribution adapts to what we actually used. Default covers
     # Open-Meteo + BOM. When the location was resolved via Nominatim
     # (postcode lookup), OSM attribution is required by their ODbL licence.
-    attribution = (
-        "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under "
-        "CC BY 4.0. Underlying data includes the Australian Bureau of Meteorology "
-        "(https://www.bom.gov.au) under Open-Meteo's licensing arrangement."
-    )
+    attribution = DEFAULT_ATTRIBUTION
     if location.source == "postcode":
-        attribution += (
-            " Postcode geocoding by © OpenStreetMap contributors, licensed "
-            "under the Open Database Licence (ODbL) — https://www.openstreetmap.org/copyright."
-        )
+        attribution += OSM_ATTRIBUTION_SUFFIX
 
     return WeatherResponse(
         location_id=location.curated_id,

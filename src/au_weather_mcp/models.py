@@ -10,9 +10,35 @@ RH outside 0-100) rather than silently passing through API hiccups.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+# Single source of truth for the attribution string. Used by build_response,
+# describe_location, and the default on WeatherResponse — kept in one place
+# so a change to the licensing wording can't go stale across surfaces.
+DEFAULT_ATTRIBUTION = (
+    "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under "
+    "CC BY 4.0. Underlying data includes the Australian Bureau of Meteorology "
+    "(https://www.bom.gov.au) under Open-Meteo's licensing arrangement."
+)
+OSM_ATTRIBUTION_SUFFIX = (
+    " Postcode geocoding by © OpenStreetMap contributors, licensed under "
+    "the Open Database Licence (ODbL) — https://www.openstreetmap.org/copyright."
+)
+
+# Every value `location_resolution` can legitimately take. Adding a new
+# resolution path requires updating this Literal AND the resolution.py
+# stage list — Pydantic will reject any unlisted value, catching the
+# 'forgot to update the type' mistake at write time.
+LocationResolution = Literal[
+    "curated",
+    "state_alias",
+    "raw_coordinates",
+    "postcode",
+    "geocoded",
+    "fuzzy_curated",
+]
 
 # Australian temperature extremes (BOM-recorded all-time):
 #   Hottest: 50.7 °C, Onslow WA, 13 Jan 2022 (also Oodnadatta 50.7 °C 1960)
@@ -36,8 +62,14 @@ class LocationSummary(BaseModel):
 
 
 class LocationDetail(BaseModel):
-    """Full metadata for one location — surface for describe_location."""
-    id: str
+    """Full metadata for one location — surface for describe_location.
+
+    `id` is the curated key when the input resolved against the curated YAML
+    (e.g. 'sydney', 'gold_coast'); None when the input was resolved via
+    postcode lookup, raw coordinates, or Open-Meteo geocoding. Matching
+    `WeatherResponse.location_id` semantics.
+    """
+    id: str | None
     name: str
     state: str
     description: str | None = None
@@ -159,7 +191,7 @@ class WeatherResponse(BaseModel):
     latitude: float
     longitude: float
     timezone: str
-    location_resolution: str  # 'curated' | 'state_alias' | 'raw_coordinates' | 'geocoded' | 'fuzzy_curated'
+    location_resolution: LocationResolution
     location_input: str  # what the user actually typed
     query: dict[str, Any] = Field(default_factory=dict)
     period: dict[str, str | None] = Field(default_factory=lambda: {"start": None, "end": None})
@@ -169,11 +201,7 @@ class WeatherResponse(BaseModel):
     hourly: list[WeatherObservation] | None = None
     daily: list[DailyAggregate] | None = None
     source: str = "Open-Meteo (aggregates Bureau of Meteorology data under licence)"
-    attribution: str = (
-        "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under "
-        "CC BY 4.0. Underlying data includes the Australian Bureau of Meteorology "
-        "(https://www.bom.gov.au) under Open-Meteo's licensing arrangement."
-    )
+    attribution: str = DEFAULT_ATTRIBUTION
     source_url: str  # the exact Open-Meteo URL this response came from
     retrieved_at: datetime
     server_version: str

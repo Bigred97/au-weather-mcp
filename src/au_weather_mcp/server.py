@@ -23,7 +23,12 @@ from pydantic import Field
 
 from . import curated as curated_mod
 from .client import OpenMeteoClient, OpenMeteoError
-from .models import LocationDetail, LocationSummary, WeatherResponse
+from .models import (
+    DEFAULT_ATTRIBUTION,
+    LocationDetail,
+    LocationSummary,
+    WeatherResponse,
+)
 from .resolution import ResolvedLocation, resolve_location
 from .shaping import build_response
 
@@ -38,11 +43,9 @@ _DEFAULT_CURRENT_VARS = (
     "rain,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,"
     "wind_gusts_10m,weather_code"
 ).split(",")
-_DEFAULT_HOURLY_VARS = (
-    "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,"
-    "rain,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,"
-    "wind_gusts_10m,weather_code"
-).split(",")
+# Hourly query asks for the same point-in-time variables as the "current"
+# block — just sampled at every hour instead of once. Same list either way.
+_DEFAULT_HOURLY_VARS = _DEFAULT_CURRENT_VARS
 _DEFAULT_DAILY_VARS = (
     "temperature_2m_max,temperature_2m_min,apparent_temperature_max,"
     "apparent_temperature_min,precipitation_sum,rain_sum,wind_speed_10m_max,"
@@ -235,11 +238,7 @@ async def describe_location(
         f"https://api.open-meteo.com/v1/forecast?latitude={resolved.latitude}"
         f"&longitude={resolved.longitude}&timezone={resolved.timezone}&current=temperature_2m"
     )
-    attribution = (
-        "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under "
-        "CC BY 4.0. Underlying data includes the Australian Bureau of Meteorology "
-        "(https://www.bom.gov.au) under Open-Meteo's licensing arrangement."
-    )
+    attribution = DEFAULT_ATTRIBUTION
     # nearest_bom_station + description live on the curated YAML row only
     nearest_bom = None
     description = None
