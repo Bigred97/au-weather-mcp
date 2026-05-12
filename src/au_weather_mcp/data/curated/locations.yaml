@@ -1,0 +1,230 @@
+# Curated Australian locations for au-weather-mcp.
+#
+# 21 locations covering the 8 capitals + 13 major regional centres.
+# Coordinates picked to align with the canonical BOM observation point for
+# each city where possible (e.g. Sydney = Observatory Hill, Melbourne =
+# Olympic Park). Timezones use IANA names so Open-Meteo applies the right
+# local-time offset including DST.
+#
+# Adding a location: pick its (lat, lng) from the BOM weather-station list
+# if possible; otherwise centre-of-city. Use the IANA timezone for the
+# location's state. The `nearest_bom_station` field is informational only —
+# Open-Meteo doesn't use it, but it lets users cross-check our values against
+# the official BOM observation if they want.
+
+locations:
+  # ---------- Capitals ----------
+  sydney:
+    name: Sydney
+    state: NSW
+    description: New South Wales capital. Observatory Hill is the canonical observation point.
+    latitude: -33.8607
+    longitude: 151.2050
+    timezone: Australia/Sydney
+    elevation_m: 39
+    nearest_bom_station: 066062 (Sydney Observatory Hill)
+
+  melbourne:
+    name: Melbourne
+    state: VIC
+    description: Victorian capital. Olympic Park station near the CBD.
+    latitude: -37.8136
+    longitude: 144.9631
+    timezone: Australia/Melbourne
+    elevation_m: 31
+    nearest_bom_station: 086338 (Melbourne Olympic Park)
+
+  brisbane:
+    name: Brisbane
+    state: QLD
+    description: Queensland capital. Brisbane Aero station.
+    latitude: -27.4698
+    longitude: 153.0251
+    timezone: Australia/Brisbane
+    elevation_m: 8
+    nearest_bom_station: 040913 (Brisbane Aero)
+
+  perth:
+    name: Perth
+    state: WA
+    description: Western Australia capital. Perth Metro station.
+    latitude: -31.9505
+    longitude: 115.8605
+    timezone: Australia/Perth
+    elevation_m: 25
+    nearest_bom_station: 009225 (Perth Metro)
+
+  adelaide:
+    name: Adelaide
+    state: SA
+    description: South Australia capital. Kent Town station near CBD.
+    latitude: -34.9285
+    longitude: 138.6007
+    timezone: Australia/Adelaide
+    elevation_m: 48
+    nearest_bom_station: 023034 (Adelaide Kent Town)
+
+  hobart:
+    name: Hobart
+    state: TAS
+    description: Tasmania capital. Ellerslie Road station.
+    latitude: -42.8821
+    longitude: 147.3272
+    timezone: Australia/Hobart
+    elevation_m: 51
+    nearest_bom_station: 094029 (Hobart Ellerslie Road)
+
+  darwin:
+    name: Darwin
+    state: NT
+    description: Northern Territory capital. Darwin Airport station.
+    latitude: -12.4634
+    longitude: 130.8456
+    timezone: Australia/Darwin
+    elevation_m: 30
+    nearest_bom_station: 014015 (Darwin Airport)
+
+  canberra:
+    name: Canberra
+    state: ACT
+    description: National capital. Canberra Airport station.
+    latitude: -35.2809
+    longitude: 149.1300
+    timezone: Australia/Sydney
+    elevation_m: 578
+    nearest_bom_station: 070351 (Canberra Airport)
+
+  # ---------- NSW regional ----------
+  newcastle:
+    name: Newcastle
+    state: NSW
+    description: NSW Hunter region — major regional centre and port.
+    latitude: -32.9283
+    longitude: 151.7817
+    timezone: Australia/Sydney
+    elevation_m: 9
+    nearest_bom_station: 061425 (Newcastle Nobbys)
+
+  wollongong:
+    name: Wollongong
+    state: NSW
+    description: NSW Illawarra coastal city.
+    latitude: -34.4278
+    longitude: 150.8931
+    timezone: Australia/Sydney
+    elevation_m: 5
+    nearest_bom_station: 068228 (Bellambi AWS)
+
+  # ---------- QLD regional ----------
+  gold_coast:
+    name: Gold Coast
+    state: QLD
+    description: South-east Queensland tourist city.
+    latitude: -28.0167
+    longitude: 153.4000
+    timezone: Australia/Brisbane
+    elevation_m: 3
+    nearest_bom_station: 040764 (Gold Coast Seaway)
+
+  sunshine_coast:
+    name: Sunshine Coast
+    state: QLD
+    description: Maroochydore region, south-east QLD coast.
+    latitude: -26.6500
+    longitude: 153.0667
+    timezone: Australia/Brisbane
+    elevation_m: 3
+    nearest_bom_station: 040861 (Sunshine Coast Airport)
+
+  cairns:
+    name: Cairns
+    state: QLD
+    description: Far North Queensland tropical city.
+    latitude: -16.9186
+    longitude: 145.7781
+    timezone: Australia/Brisbane
+    elevation_m: 3
+    nearest_bom_station: 031011 (Cairns Aero)
+
+  townsville:
+    name: Townsville
+    state: QLD
+    description: North Queensland tropical city.
+    latitude: -19.2589
+    longitude: 146.8169
+    timezone: Australia/Brisbane
+    elevation_m: 4
+    nearest_bom_station: 032040 (Townsville Aero)
+
+  mackay:
+    name: Mackay
+    state: QLD
+    description: Central Queensland coastal city.
+    latitude: -21.1411
+    longitude: 149.1860
+    timezone: Australia/Brisbane
+    elevation_m: 30
+    nearest_bom_station: 033119 (Mackay MO)
+
+  # ---------- VIC regional ----------
+  geelong:
+    name: Geelong
+    state: VIC
+    description: Victoria's second city, Bass Strait coast.
+    latitude: -38.1499
+    longitude: 144.3617
+    timezone: Australia/Melbourne
+    elevation_m: 14
+    nearest_bom_station: 087131 (Avalon Airport)
+
+  ballarat:
+    name: Ballarat
+    state: VIC
+    description: Western Victoria regional centre, goldfields.
+    latitude: -37.5622
+    longitude: 143.8503
+    timezone: Australia/Melbourne
+    elevation_m: 435
+    nearest_bom_station: 089002 (Ballarat Aerodrome)
+
+  bendigo:
+    name: Bendigo
+    state: VIC
+    description: Central Victoria regional centre.
+    latitude: -36.7570
+    longitude: 144.2794
+    timezone: Australia/Melbourne
+    elevation_m: 213
+    nearest_bom_station: 081123 (Bendigo Airport)
+
+  # ---------- TAS regional ----------
+  launceston:
+    name: Launceston
+    state: TAS
+    description: Northern Tasmania regional centre.
+    latitude: -41.4332
+    longitude: 147.1441
+    timezone: Australia/Hobart
+    elevation_m: 5
+    nearest_bom_station: 091237 (Launceston Airport)
+
+  # ---------- NT / WA / SA outliers ----------
+  alice_springs:
+    name: Alice Springs
+    state: NT
+    description: Central Australia desert town.
+    latitude: -23.6980
+    longitude: 133.8807
+    timezone: Australia/Darwin
+    elevation_m: 545
+    nearest_bom_station: 015590 (Alice Springs Airport)
+
+  broome:
+    name: Broome
+    state: WA
+    description: Kimberley region, NW WA coast.
+    latitude: -17.9614
+    longitude: 122.2359
+    timezone: Australia/Perth
+    elevation_m: 7
+    nearest_bom_station: 003003 (Broome Airport)

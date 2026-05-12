@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "abs": {
+      "command": "uvx",
+      "args": ["--upgrade", "abs-mcp"]
+    },
+    "rba": {
+      "command": "uvx",
+      "args": ["--upgrade", "rba-mcp"]
+    },
+    "ato": {
+      "command": "uvx",
+      "args": ["--upgrade", "ato-mcp"]
+    },
+    "weather": {
+      "command": "uvx",
+      "args": ["--upgrade", "au-weather-mcp"]
+    }
+  }
+}

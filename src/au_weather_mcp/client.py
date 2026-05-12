@@ -1,0 +1,165 @@
+"""Async Open-Meteo client.
+
+Open-Meteo (https://open-meteo.com) is a free weather API that aggregates
+many national meteorological services including the Australian Bureau of
+Meteorology, ERA5 reanalysis, GFS, and ICON. They handle the licensing
+arrangements with each upstream provider; we attribute Open-Meteo + BOM
+in every response.
+
+Why Open-Meteo and not BOM direct: BOM blocks non-browser User-Agents and
+their endpoints have no SLA, no schema versioning, and no documented
+commercial-use path below the ~$5k/yr Registered User Service. Open-Meteo's
+free tier explicitly allows non-commercial use; commercial use at scale is
+$30/mo. For free-MCP traffic, the free tier is sufficient and clean.
+
+We make two endpoint families:
+  - https://api.open-meteo.com/v1/forecast  — current + future weather
+  - https://archive-api.open-meteo.com/v1/archive — historical from 1940
+"""
+from __future__ import annotations
+
+import json
+from typing import Any
+from urllib.parse import urlencode
+
+import httpx
+
+from .cache import TTL, Cache, CacheKind
+
+FORECAST_BASE = "https://api.open-meteo.com/v1/forecast"
+ARCHIVE_BASE = "https://archive-api.open-meteo.com/v1/archive"
+DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
+class OpenMeteoError(Exception):
+    """Raised when the Open-Meteo API returns a non-2xx response or unparseable body."""
+
+
+class OpenMeteoClient:
+    def __init__(
+        self,
+        cache: Cache | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self.cache = cache or Cache()
+        # Identify honestly. Open-Meteo doesn't block on UA — unlike BOM —
+        # but identifying lets them contact us if we ever misbehave.
+        self._http = httpx.AsyncClient(
+            timeout=DEFAULT_TIMEOUT,
+            transport=transport,
+            headers={
+                "User-Agent": "au-weather-mcp/0.1.0 (+https://github.com/Bigred97/au-weather-mcp)",
+                "Accept": "application/json",
+            },
+        )
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
+
+    async def __aenter__(self) -> "OpenMeteoClient":
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self.aclose()
+
+    async def _fetch(self, url: str, kind: CacheKind) -> dict[str, Any]:
+        cached = await self.cache.get(url, ttl=TTL[kind])
+        if cached is not None:
+            try:
+                return json.loads(cached)
+            except json.JSONDecodeError:
+                # Corrupt cache entry — fall through and re-fetch.
+                pass
+        try:
+            resp = await self._http.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # Open-Meteo returns 4xx with a JSON body describing the error;
+            # surface that to the MCP tool so the user gets an actionable hint.
+            try:
+                body = e.response.json()
+                reason = body.get("reason", body)
+            except Exception:
+                reason = e.response.text[:200]
+            raise OpenMeteoError(
+                f"Open-Meteo API returned {e.response.status_code} for {url}: {reason}"
+            ) from e
+        except httpx.RequestError as e:
+            raise OpenMeteoError(f"Open-Meteo API request failed: {e}") from e
+        try:
+            data = resp.json()
+        except json.JSONDecodeError as e:
+            raise OpenMeteoError(f"Failed to parse Open-Meteo JSON from {url}: {e}") from e
+        await self.cache.set(url, resp.content, kind=kind)
+        return data
+
+    async def forecast(
+        self,
+        latitude: float,
+        longitude: float,
+        timezone: str,
+        current: list[str] | None = None,
+        hourly: list[str] | None = None,
+        daily: list[str] | None = None,
+        forecast_days: int | None = None,
+        past_days: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        kind: CacheKind = "forecast",
+    ) -> dict[str, Any]:
+        """Hit the forecast endpoint (current + future weather).
+
+        `start_date` / `end_date` here use YYYY-MM-DD format and only return
+        full days. For dates in the past, use `archive()` instead — it has
+        deeper history (1940+) and is the authoritative source for past data.
+        """
+        params: dict[str, Any] = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "timezone": timezone,
+        }
+        if current:
+            params["current"] = ",".join(current)
+        if hourly:
+            params["hourly"] = ",".join(hourly)
+        if daily:
+            params["daily"] = ",".join(daily)
+        if forecast_days is not None:
+            params["forecast_days"] = forecast_days
+        if past_days is not None:
+            params["past_days"] = past_days
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        url = f"{FORECAST_BASE}?{urlencode(params)}"
+        return await self._fetch(url, kind=kind)
+
+    async def archive(
+        self,
+        latitude: float,
+        longitude: float,
+        timezone: str,
+        start_date: str,
+        end_date: str,
+        hourly: list[str] | None = None,
+        daily: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Hit the historical archive endpoint (1940-onwards).
+
+        The archive runs on a ~5-day lag; queries within the last 5 days
+        should use `forecast()` with `past_days` instead.
+        """
+        params: dict[str, Any] = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "timezone": timezone,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+        if hourly:
+            params["hourly"] = ",".join(hourly)
+        if daily:
+            params["daily"] = ",".join(daily)
+        url = f"{ARCHIVE_BASE}?{urlencode(params)}"
+        return await self._fetch(url, kind="historical")

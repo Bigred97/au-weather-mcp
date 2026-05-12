@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "au-weather-mcp"
+version = "0.1.0"
+description = "MCP server for Australian weather. Plain-English access to current observations, 16-day forecasts, and 80+ years of historical data for 21 curated AU locations, sourced via Open-Meteo (which aggregates Bureau of Meteorology data under licence)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Harry Vass" }]
+keywords = ["mcp", "weather", "australia", "bom", "bureau-of-meteorology", "open-meteo", "claude", "fastmcp", "forecast", "climate"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "fastmcp>=2.0,<4",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "rapidfuzz>=3.9",
+    "aiosqlite>=0.20",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+]
+
+[project.scripts]
+au-weather-mcp = "au_weather_mcp.server:main"
+
+[project.urls]
+Homepage = "https://github.com/Bigred97/au-weather-mcp"
+Issues = "https://github.com/Bigred97/au-weather-mcp/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/au_weather_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["live: hits the real Open-Meteo API"]
+addopts = "-m 'not live'"
+testpaths = ["tests"]
+pythonpath = ["src"]

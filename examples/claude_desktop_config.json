@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "weather": {
+      "command": "uvx",
+      "args": ["--upgrade", "au-weather-mcp"]
+    }
+  }
+}

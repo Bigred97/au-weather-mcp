@@ -1,0 +1,25 @@
+# au-weather-mcp
+
+> MCP server giving LLM agents live access to Australian weather data — current observations, 16-day forecasts, and 80+ years of historical archive — for 21 curated AU locations (8 capitals + 13 regional centres). Backed by Open-Meteo, which aggregates Bureau of Meteorology data under licence.
+
+au-weather-mcp wraps Open-Meteo (https://open-meteo.com) and exposes 5 MCP tools to any client that speaks the Model Context Protocol (Claude Desktop, Cursor, Cline, etc.). Plain-English location IDs (`sydney`, `cairns`) map to canonical lat/lng coordinates anchored to the nearest BOM observation point. Every response carries provenance fields (source URL, CC-BY 4.0 attribution to Open-Meteo + BOM, timestamps, server version) and Pydantic sanity validators reject upstream values outside the plausible Australian range.
+
+The five tools follow the same pattern as the sister servers:
+
+- `search_locations(query, limit)` — fuzzy-search the 21 curated locations
+- `describe_location(location)` — lat/lng, timezone, elevation, nearest BOM station
+- `latest(location)` — current weather observation (15-min cache)
+- `get_weather(location, start_date, end_date, granularity)` — time-series; auto-routes to historical archive (1940+) or forecast (today + 16 days)
+- `list_curated()` — all 21 supported location IDs
+
+## Documentation
+
+- [README](https://github.com/Bigred97/au-weather-mcp/blob/main/README.md): install + worked examples + trust contract
+- [CHANGELOG](https://github.com/Bigred97/au-weather-mcp/blob/main/CHANGELOG.md): release history
+- [curated locations YAML](https://github.com/Bigred97/au-weather-mcp/blob/main/src/au_weather_mcp/data/curated/locations.yaml): the 21 locations + their coordinates
+
+## Sister servers
+
+- [abs-mcp](https://github.com/Bigred97/abs-mcp) — Australian Bureau of Statistics (labour, CPI, GDP, wages, housing, population)
+- [rba-mcp](https://github.com/Bigred97/rba-mcp) — Reserve Bank of Australia (cash rate, FX, lending rates)
+- [ato-mcp](https://github.com/Bigred97/ato-mcp) — Australian Taxation Office + ACNC charity register
