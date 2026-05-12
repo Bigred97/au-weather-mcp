@@ -28,6 +28,7 @@ from .cache import TTL, Cache, CacheKind
 
 FORECAST_BASE = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_BASE = "https://archive-api.open-meteo.com/v1/archive"
+GEOCODING_BASE = "https://geocoding-api.open-meteo.com/v1/search"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
@@ -134,6 +135,35 @@ class OpenMeteoClient:
             params["end_date"] = end_date
         url = f"{FORECAST_BASE}?{urlencode(params)}"
         return await self._fetch(url, kind=kind)
+
+    async def geocode_au(
+        self,
+        name: str,
+        count: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Resolve an AU place name to lat/lng via Open-Meteo's geocoding API.
+
+        Returns up to `count` candidates, filtered to country_code='AU' and
+        sorted by population (so 'Manly' returns the famous Sydney suburb
+        of pop 16k before a tiny QLD locality of unknown pop). Empty list
+        if nothing matches.
+
+        The geocoding API is cached as 'metadata' kind (7-day TTL) — place
+        coordinates basically never change.
+        """
+        params = {
+            "name": name,
+            "count": max(count, 10),  # always pull a wide pool so AU filter has options
+            "language": "en",
+            "format": "json",
+        }
+        url = f"{GEOCODING_BASE}?{urlencode(params)}"
+        data = await self._fetch(url, kind="metadata")
+        results = data.get("results") or []
+        # Filter to AU only, then sort by population desc (None pop → 0)
+        au_results = [r for r in results if r.get("country_code") == "AU"]
+        au_results.sort(key=lambda r: -(r.get("population") or 0))
+        return au_results[:count]
 
     async def archive(
         self,

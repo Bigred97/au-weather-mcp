@@ -1,5 +1,6 @@
 """Server-tool input validation — every bad input shape must raise ValueError
-with an actionable hint BEFORE the network is reached.
+with an actionable hint. Location resolution itself has its own test file
+(test_resolution.py); this file covers everything else.
 
 Mirrors abs-mcp / rba-mcp's validation test pattern.
 """
@@ -8,32 +9,6 @@ from __future__ import annotations
 import pytest
 
 from au_weather_mcp import server
-
-
-# ---------- _normalize_location_id ----------
-
-def test_normalize_location_id_strips_and_lowercases():
-    assert server._normalize_location_id("  SYDNEY  ") == "sydney"
-    assert server._normalize_location_id("Melbourne") == "melbourne"
-    assert server._normalize_location_id("gold_coast") == "gold_coast"
-
-
-def test_normalize_location_id_rejects_non_string():
-    for bad in (123, None, ["sydney"], True, 4.5, {"id": "sydney"}):
-        with pytest.raises(ValueError, match="location must be a string"):
-            server._normalize_location_id(bad)
-
-
-def test_normalize_location_id_rejects_empty():
-    with pytest.raises(ValueError, match="location is empty"):
-        server._normalize_location_id("   ")
-
-
-def test_normalize_location_id_rejects_url_unsafe_characters():
-    for bad in ("sydney?evil", "sydney/foo", "sydney&bar", "sydney#frag",
-                "sydney with space", "sydney;drop", "sydney.attack"):
-        with pytest.raises(ValueError, match="invalid characters"):
-            server._normalize_location_id(bad)
 
 
 # ---------- _validate_date ----------
@@ -108,11 +83,6 @@ async def test_describe_location_rejects_non_string():
         await server.describe_location(123)  # type: ignore[arg-type]
 
 
-async def test_describe_location_rejects_unknown_location():
-    with pytest.raises(ValueError, match="Unknown location"):
-        await server.describe_location("not_a_real_place")
-
-
 async def test_describe_sydney_returns_metadata():
     detail = await server.describe_location("sydney")
     assert detail.id == "sydney"
@@ -125,16 +95,24 @@ async def test_describe_sydney_returns_metadata():
     assert "api.open-meteo.com" in detail.open_meteo_url
 
 
+async def test_describe_sydney_case_insensitive():
+    """Customer typing 'Sydney' instead of 'sydney' must still work."""
+    detail = await server.describe_location("Sydney")
+    assert detail.id == "sydney"
+
+
+async def test_describe_state_code_returns_capital():
+    """Customer typing 'NSW' should resolve to Sydney."""
+    detail = await server.describe_location("NSW")
+    assert detail.id == "sydney"
+    assert detail.state == "NSW"
+
+
 # ---------- latest ----------
 
 async def test_latest_rejects_non_string_location():
     with pytest.raises(ValueError, match="location must be a string"):
         await server.latest(123)  # type: ignore[arg-type]
-
-
-async def test_latest_rejects_unknown_location():
-    with pytest.raises(ValueError, match="Unknown location"):
-        await server.latest("totally_not_a_real_place")
 
 
 # ---------- get_weather ----------

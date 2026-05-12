@@ -100,6 +100,21 @@ Add to `~/.cursor/mcp.json`:
 | `get_weather(location, start_date, end_date, granularity)` | Time-series query. Auto-routes to historical archive (1940+) or forecast (today + 16 days). Daily or hourly granularity. |
 | `list_curated()` | All 21 supported location IDs. |
 
+## Accepts almost any input shape
+
+The `location` parameter on every tool resolves six different input shapes — agents and users don't need to know the curated key format:
+
+| Input shape | Example | Resolves via |
+|---|---|---|
+| Curated ID | `"sydney"`, `"gold_coast"` | Direct curated lookup (fast) |
+| Place name, any case | `"Sydney"`, `"Gold Coast"`, `"GOLD COAST"` | Normalised curated lookup |
+| State code or full name | `"NSW"`, `"Queensland"`, `"Western Australia"` | State → capital alias |
+| Raw coordinates | `"-33.87,151.21"` | Direct lat/lng (AU bbox enforced) |
+| Any AU place name | `"Byron Bay"`, `"Margaret River"`, `"Toowoomba"` | Open-Meteo geocoding (AU-filtered, population-sorted) |
+| Typo of a curated name | `"Sydny"`, `"Melbourn"` | High-confidence fuzzy match |
+
+Every response includes a `location_resolution` field with one of `curated`, `state_alias`, `raw_coordinates`, `geocoded`, or `fuzzy_curated` — so the agent (and the user) can see HOW the input was interpreted.
+
 ## Curated locations
 
 21 locations covering all 8 state/territory capitals plus 13 major regional centres:

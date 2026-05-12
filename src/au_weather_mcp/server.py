@@ -24,10 +24,9 @@ from pydantic import Field
 from . import curated as curated_mod
 from .client import OpenMeteoClient, OpenMeteoError
 from .models import LocationDetail, LocationSummary, WeatherResponse
+from .resolution import ResolvedLocation, resolve_location
 from .shaping import build_response
 
-# Location IDs are lowercase letters + digits + underscore.
-_LOCATION_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # Date strings: strictly YYYY-MM-DD. Anything else fails URL safety.
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -76,27 +75,6 @@ async def reset_client_for_tests() -> None:
         _client = None
 
 
-def _normalize_location_id(location: Any) -> str:
-    if not isinstance(location, str):
-        raise ValueError(
-            f"location must be a string, got {type(location).__name__}. "
-            "Try list_curated() to discover IDs like 'sydney', 'melbourne', or 'cairns'."
-        )
-    normalized = location.strip().lower()
-    if not normalized:
-        raise ValueError(
-            "location is empty. Try list_curated() to discover IDs like "
-            "'sydney', 'melbourne', or 'cairns'."
-        )
-    if not _LOCATION_ID_PATTERN.match(normalized):
-        raise ValueError(
-            f"location {location!r} contains invalid characters — "
-            "location IDs are lowercase letters, digits, and underscores "
-            "(e.g. 'sydney', 'gold_coast'). Try search_locations() to find IDs."
-        )
-    return normalized
-
-
 def _validate_date(value: Any, name: str) -> str | None:
     if value is None:
         return None
@@ -121,17 +99,9 @@ def _validate_date(value: Any, name: str) -> str | None:
     return s
 
 
-def _resolve_location(location_id: str) -> curated_mod.CuratedLocation:
-    loc = curated_mod.get(location_id)
-    if loc is None:
-        valid = curated_mod.list_ids()
-        raise ValueError(
-            f"Unknown location {location_id!r}. "
-            f"Try one of: {', '.join(valid[:10])}"
-            + ("..." if len(valid) > 10 else "")
-            + ". Use search_locations() for fuzzy lookup."
-        )
-    return loc
+async def _resolve(client: OpenMeteoClient, location: Any) -> ResolvedLocation:
+    """Single entry to the resolution layer. Raises ValueError on bad input."""
+    return await resolve_location(client, location)
 
 
 # ---------- Tools ----------
@@ -215,55 +185,81 @@ async def describe_location(
         str,
         Field(
             description=(
-                "Curated location ID like 'sydney', 'melbourne', 'cairns'. "
-                "Use search_locations() or list_curated() to discover. "
-                "Case-insensitive ('Sydney', 'SYDNEY', ' sydney ' all work)."
+                "Any Australian location, in any of these shapes: "
+                "(1) curated ID like 'sydney', 'gold_coast'; "
+                "(2) place name in any case like 'Sydney', 'Gold Coast', 'Margaret River', 'Byron Bay'; "
+                "(3) state code or name like 'NSW', 'VIC', 'Queensland' (returns the state capital); "
+                "(4) raw coordinates like '-33.87,151.21'. "
+                "Case-insensitive throughout."
             ),
-            examples=["sydney", "melbourne", "cairns", "alice_springs"],
+            examples=[
+                "sydney",
+                "Sydney",
+                "Margaret River",
+                "NSW",
+                "Queensland",
+                "-33.87,151.21",
+                "Byron Bay",
+            ],
         ),
     ],
 ) -> LocationDetail:
-    """Return full metadata for a curated location — lat/lng, timezone,
-    elevation, nearest BOM station, and the canonical Open-Meteo URL.
+    """Return metadata for an Australian location — name, lat/lng, timezone,
+    elevation, and (for curated locations) the nearest BOM station ID.
+
+    Accepts a wide range of input shapes for compatibility — see the
+    `location` parameter description. The returned `id` is None for
+    non-curated lookups (geocoded place names, raw coordinates) and a
+    snake_case curated key when the input matched the curated set.
 
     Examples:
-        detail = await describe_location("sydney")
-        # detail.latitude == -33.8607
-        # detail.longitude == 151.2050
-        # detail.timezone == 'Australia/Sydney'
-        # detail.nearest_bom_station == '066062 (Sydney Observatory Hill)'
+        await describe_location("sydney")           # → curated path
+        await describe_location("Sydney")           # → curated path (case-insensitive)
+        await describe_location("NSW")              # → state capital (Sydney)
+        await describe_location("Margaret River")   # → geocoded (Western Australia)
+        await describe_location("-33.87,151.21")    # → raw coordinates
 
     When to use:
-        - Before calling get_weather, to confirm the location's coordinates
-          and timezone
-        - To cross-reference with BOM's own observation network
-        - To get a direct Open-Meteo URL for citation in agent responses
+        - Before calling get_weather, to confirm coordinates and timezone
+        - To cross-reference with BOM's own observation network (for curated)
+        - To verify how the server resolved an ambiguous customer input
 
     Returns:
-        LocationDetail with id, name, state, lat/lng, timezone, elevation,
-        nearest BOM station ID, the Open-Meteo URL, and the CC-BY attribution.
+        LocationDetail with id (or None), name, state, lat/lng, timezone,
+        elevation, nearest BOM station ID (curated only), the Open-Meteo
+        URL, and the CC-BY attribution.
     """
-    location_id = _normalize_location_id(location)
-    loc = _resolve_location(location_id)
+    client = await _get_client()
+    resolved = await _resolve(client, location)
     open_meteo_url = (
-        f"https://api.open-meteo.com/v1/forecast?latitude={loc.latitude}"
-        f"&longitude={loc.longitude}&timezone={loc.timezone}&current=temperature_2m"
+        f"https://api.open-meteo.com/v1/forecast?latitude={resolved.latitude}"
+        f"&longitude={resolved.longitude}&timezone={resolved.timezone}&current=temperature_2m"
     )
     attribution = (
         "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under "
         "CC BY 4.0. Underlying data includes the Australian Bureau of Meteorology "
         "(https://www.bom.gov.au) under Open-Meteo's licensing arrangement."
     )
+    # nearest_bom_station + description live on the curated YAML row only
+    nearest_bom = None
+    description = None
+    if resolved.curated_id is not None:
+        cd = curated_mod.get(resolved.curated_id)
+        if cd is not None:
+            nearest_bom = cd.nearest_bom_station
+            description = cd.description
+    if description is None:
+        description = f"Resolved via {resolved.source} from input {resolved.original_input!r}"
     return LocationDetail(
-        id=loc.id,
-        name=loc.name,
-        state=loc.state,
-        description=loc.description,
-        latitude=loc.latitude,
-        longitude=loc.longitude,
-        timezone=loc.timezone,
-        elevation_m=loc.elevation_m,
-        nearest_bom_station=loc.nearest_bom_station,
+        id=resolved.curated_id,
+        name=resolved.name,
+        state=resolved.state or "?",
+        description=description,
+        latitude=resolved.latitude,
+        longitude=resolved.longitude,
+        timezone=resolved.timezone,
+        elevation_m=resolved.elevation_m,
+        nearest_bom_station=nearest_bom,
         open_meteo_url=open_meteo_url,
         attribution=attribution,
     )
@@ -275,68 +271,75 @@ async def latest(
         str,
         Field(
             description=(
-                "Curated location ID. Use list_curated() to enumerate the 21 "
-                "supported AU locations, or search_locations() for fuzzy lookup."
+                "Any Australian location. Accepted shapes: curated ID ('sydney'), "
+                "place name in any case ('Sydney', 'Byron Bay', 'Margaret River'), "
+                "state code or name ('NSW', 'Queensland' → returns the capital), "
+                "or raw coordinates ('-33.87,151.21')."
             ),
-            examples=["sydney", "melbourne", "brisbane", "perth", "darwin"],
+            examples=[
+                "sydney",
+                "Sydney",
+                "Byron Bay",
+                "NSW",
+                "Queensland",
+                "-33.87,151.21",
+            ],
         ),
     ],
 ) -> WeatherResponse:
-    """Return the current weather observation for a curated location.
+    """Return the current weather observation for any Australian location.
 
     Wraps Open-Meteo's `/forecast` endpoint with `current=...` parameters
     and a 15-minute cache TTL (matches Open-Meteo's own update cadence).
-    Use this for "what's the weather right now?" questions — warm-cache
-    latency target < 50 ms.
+    Use for "what's the weather right now?" — warm-cache latency < 100 ms.
 
     Examples:
-        resp = await latest("sydney")
-        # resp.current.temperature_c == 19.7
-        # resp.current.relative_humidity_pct == 67
-        # resp.current.wind_speed_kmh == 18.4
-        # resp.current.weather_description == 'Mainly clear'
+        resp = await latest("sydney")               # curated, fast path
+        resp = await latest("Sydney")               # case-insensitive
+        resp = await latest("Byron Bay")            # geocoded
+        resp = await latest("NSW")                  # state → Sydney
+        resp = await latest("-33.87,151.21")        # raw coordinates
 
-        resp = await latest("cairns")
-        # → tropical reading: ~28°C, 80% humidity in May
+    The response's `location_resolution` field tells the agent how the
+    input was interpreted ('curated', 'state_alias', 'geocoded',
+    'raw_coordinates', or 'fuzzy_curated').
 
     When to use:
-        - "What's the weather right now in <city>?" — the canonical use case
-        - Building a multi-city current-conditions dashboard
-        - Anchoring a longer agent conversation to live weather context
+        - "What's the weather right now in <place>?" — canonical use case
+        - Multi-city current-conditions dashboards (call once per place)
+        - Anchoring agent conversations to live weather context
 
     Returns:
-        WeatherResponse with `current` populated (single WeatherObservation),
-        plus location metadata, source_url for citation, the CC-BY attribution,
-        and the server version.
+        WeatherResponse with `current` populated, plus location metadata,
+        resolution source, source_url, CC-BY attribution, and server_version.
     """
-    location_id = _normalize_location_id(location)
-    loc = _resolve_location(location_id)
     client = await _get_client()
+    resolved = await _resolve(client, location)
     try:
         payload = await client.forecast(
-            latitude=loc.latitude,
-            longitude=loc.longitude,
-            timezone=loc.timezone,
+            latitude=resolved.latitude,
+            longitude=resolved.longitude,
+            timezone=resolved.timezone,
             current=_DEFAULT_CURRENT_VARS,
             forecast_days=1,
             kind="current",
         )
     except OpenMeteoError as e:
         raise ValueError(
-            f"Could not fetch current weather for {location_id}. "
-            f"Try describe_location('{location_id}') to verify coordinates. ({e})"
+            f"Could not fetch current weather for {location!r} "
+            f"(resolved to {resolved.name}). "
+            f"Try describe_location({location!r}) to verify coordinates. ({e})"
         ) from e
-    # Reconstruct the URL we hit, for source_url citation
     source_url = (
-        f"https://api.open-meteo.com/v1/forecast?latitude={loc.latitude}"
-        f"&longitude={loc.longitude}&timezone={loc.timezone}"
+        f"https://api.open-meteo.com/v1/forecast?latitude={resolved.latitude}"
+        f"&longitude={resolved.longitude}&timezone={resolved.timezone}"
         f"&current={','.join(_DEFAULT_CURRENT_VARS)}&forecast_days=1"
     )
     return build_response(
-        location=loc,
+        location=resolved,
         payload=payload,
         source_url=source_url,
-        user_query={"location": location_id},
+        user_query={"location": location},
     )
 
 
@@ -345,8 +348,18 @@ async def get_weather(
     location: Annotated[
         str,
         Field(
-            description="Curated location ID like 'sydney'. Use list_curated() to discover.",
-            examples=["sydney", "melbourne", "brisbane"],
+            description=(
+                "Any Australian location. Same accepted shapes as latest(): "
+                "curated ID, place name (any case), state code/name, or raw "
+                "'lat,lng' coordinates."
+            ),
+            examples=[
+                "sydney",
+                "Margaret River",
+                "NSW",
+                "Byron Bay",
+                "-33.87,151.21",
+            ],
         ),
     ],
     start_date: Annotated[
@@ -421,7 +434,6 @@ async def get_weather(
         WeatherResponse with either `daily` or `hourly` populated depending
         on `granularity`. Period bounds populated from actual returned data.
     """
-    location_id = _normalize_location_id(location)
     start_validated = _validate_date(start_date, "start_date")
     end_validated = _validate_date(end_date, "end_date")
     if start_validated and end_validated and start_validated > end_validated:
@@ -433,8 +445,8 @@ async def get_weather(
         raise ValueError(
             f"granularity must be 'daily' or 'hourly', got {granularity!r}."
         )
-    loc = _resolve_location(location_id)
     client = await _get_client()
+    resolved = await _resolve(client, location)
 
     today = _date.today()
     # If no dates supplied, return today's data via forecast
@@ -458,9 +470,9 @@ async def get_weather(
     try:
         if use_archive:
             payload = await client.archive(
-                latitude=loc.latitude,
-                longitude=loc.longitude,
-                timezone=loc.timezone,
+                latitude=resolved.latitude,
+                longitude=resolved.longitude,
+                timezone=resolved.timezone,
                 start_date=start_validated,
                 end_date=end_validated,
                 hourly=hourly_arg,
@@ -469,9 +481,9 @@ async def get_weather(
             base = "https://archive-api.open-meteo.com/v1/archive"
         else:
             payload = await client.forecast(
-                latitude=loc.latitude,
-                longitude=loc.longitude,
-                timezone=loc.timezone,
+                latitude=resolved.latitude,
+                longitude=resolved.longitude,
+                timezone=resolved.timezone,
                 hourly=hourly_arg,
                 daily=daily_arg,
                 start_date=start_validated,
@@ -480,21 +492,21 @@ async def get_weather(
             base = "https://api.open-meteo.com/v1/forecast"
     except OpenMeteoError as e:
         raise ValueError(
-            f"Could not fetch weather for {location_id} between {start_validated} "
-            f"and {end_validated}. ({e})"
+            f"Could not fetch weather for {location!r} (resolved to {resolved.name}) "
+            f"between {start_validated} and {end_validated}. ({e})"
         ) from e
 
     source_url = (
-        f"{base}?latitude={loc.latitude}&longitude={loc.longitude}"
-        f"&timezone={loc.timezone}&start_date={start_validated}&end_date={end_validated}"
+        f"{base}?latitude={resolved.latitude}&longitude={resolved.longitude}"
+        f"&timezone={resolved.timezone}&start_date={start_validated}&end_date={end_validated}"
         f"&{granularity}={','.join(vars_param)}"
     )
     return build_response(
-        location=loc,
+        location=resolved,
         payload=payload,
         source_url=source_url,
         user_query={
-            "location": location_id,
+            "location": location,
             "start_date": start_validated,
             "end_date": end_validated,
             "granularity": granularity,

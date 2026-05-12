@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from au_weather_mcp.curated import CuratedLocation
 from au_weather_mcp.models import WeatherObservation
+from au_weather_mcp.resolution import ResolvedLocation
 from au_weather_mcp.shaping import (
     _current_from_payload,
     _daily_from_payload,
@@ -17,16 +17,17 @@ from au_weather_mcp.shaping import (
 
 @pytest.fixture
 def sydney():
-    return CuratedLocation(
-        id="sydney",
+    return ResolvedLocation(
         name="Sydney",
         state="NSW",
-        description="test",
+        country="Australia",
         latitude=-33.86,
         longitude=151.21,
         timezone="Australia/Sydney",
         elevation_m=39,
-        nearest_bom_station="066062",
+        curated_id="sydney",
+        source="curated",
+        original_input="sydney",
     )
 
 

@@ -147,13 +147,20 @@ class WeatherResponse(BaseModel):
 
     Trust contract: every field below is populated on every successful
     response. Stale-cache responses set `stale: True` with a reason.
+
+    `location_id` is the curated key when the input resolved to a curated
+    location, otherwise None (e.g. for raw coordinates or geocoded place
+    names). `location_resolution` explains how we got here — see
+    resolution.ResolvedLocation.source values.
     """
-    location_id: str
+    location_id: str | None
     location_name: str
-    state: str
+    state: str | None
     latitude: float
     longitude: float
     timezone: str
+    location_resolution: str  # 'curated' | 'state_alias' | 'raw_coordinates' | 'geocoded' | 'fuzzy_curated'
+    location_input: str  # what the user actually typed
     query: dict[str, Any] = Field(default_factory=dict)
     period: dict[str, str | None] = Field(default_factory=lambda: {"start": None, "end": None})
     # Exactly one of `current` / `hourly` / `daily` is populated per response,

@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from . import __version__
-from .curated import CuratedLocation
 from .models import DailyAggregate, WeatherObservation, WeatherResponse
+from .resolution import ResolvedLocation
 
 # WMO weather codes: https://open-meteo.com/en/docs (and WMO 4677 standard).
 # Mapping comes from Open-Meteo's documentation page. Used to surface a
@@ -166,7 +166,7 @@ def _daily_from_payload(daily: dict[str, Any]) -> list[DailyAggregate]:
 
 def build_response(
     *,
-    location: CuratedLocation,
+    location: ResolvedLocation,
     payload: dict[str, Any],
     source_url: str,
     user_query: dict[str, Any],
@@ -175,7 +175,13 @@ def build_response(
 ) -> WeatherResponse:
     """Build the typed envelope. Pivots whichever of current/hourly/daily
     Open-Meteo returned. Always sets retrieved_at + server_version + the
-    full attribution string."""
+    full attribution string.
+
+    `location` is a ResolvedLocation (from resolution.resolve_location).
+    For curated lookups, location.curated_id is the curated YAML key; for
+    geocoded/coord-based lookups it's None. Either way every response
+    carries the resolved name + lat/lng + the resolution-source marker
+    so the agent (and the user) can see HOW the input was resolved."""
     current = payload.get("current")
     hourly = payload.get("hourly")
     daily = payload.get("daily")
@@ -198,12 +204,14 @@ def build_response(
             end_period = end_period or current_obs.time
 
     return WeatherResponse(
-        location_id=location.id,
+        location_id=location.curated_id,
         location_name=location.name,
         state=location.state,
         latitude=location.latitude,
         longitude=location.longitude,
         timezone=location.timezone,
+        location_resolution=location.source,
+        location_input=location.original_input,
         query=user_query,
         period={"start": start_period, "end": end_period},
         current=current_obs,
