@@ -167,7 +167,9 @@ Returns:
   "source": "Open-Meteo (aggregates Bureau of Meteorology data under licence)",
   "attribution": "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under CC BY 4.0...",
   "source_url": "https://api.open-meteo.com/v1/forecast?latitude=-33.8607&...",
-  "server_version": "0.1.0"
+  "server_version": "<package version, e.g. 0.3.3>",
+  "location_resolution": "curated",
+  "location_input": "sydney"
 }
 ```
 

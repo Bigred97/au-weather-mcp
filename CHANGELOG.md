@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.4 (2026-05-12)
+
+**Iter-4 docs hygiene** — closes the last item found by the
+adversarial probe. Same class of bug as 0.3.3's UA fix, just in the
+docs: the README's example response object hardcoded
+`"server_version": "0.1.0"` while the runtime correctly emitted
+`"0.3.3"`. Customers copy-pasting the example would have had an
+inaccurate expectation.
+
+- README example response now uses a placeholder
+  `"server_version": "<package version, e.g. 0.3.3>"` so the
+  literal doesn't drift again on future patch releases.
+- Same example response now also shows the `location_resolution` and
+  `location_input` fields (added in 0.2.0) that were missing from
+  the original 0.1.0 example.
+
+No code changes. 111 tests still green.
+
 ## 0.3.3 (2026-05-12)
 
 **Iter-3 audit hygiene fix** — closes the last item flagged by the code-
