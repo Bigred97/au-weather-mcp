@@ -60,6 +60,10 @@ _client_lock = asyncio.Lock()
 
 async def _get_client() -> OpenMeteoClient:
     global _client
+    # Fast path: once initialised, no need to take the lock — every tool
+    # call hits this. Mirrors the double-checked pattern in cache.py.
+    if _client is not None:
+        return _client
     async with _client_lock:
         if _client is None:
             _client = OpenMeteoClient()

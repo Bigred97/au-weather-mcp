@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.2 (2026-05-12)
+
+**Iter-2 audit micro-refactors** — zero customer-visible bugs surfaced
+(Agent A and C both PASS on 0.3.1), this release just absorbs four
+small efficiency / hygiene items flagged by the code-review agent.
+
+- `_get_client()` now uses the double-checked-locking pattern from
+  `cache.py` — fast-paths every tool call after first init instead of
+  taking the lock on every invocation.
+- `from rapidfuzz import fuzz` hoisted out of `_try_fuzzy_curated`'s
+  hot path to module scope. Saves a per-call re-import.
+- Standard `__aexit__(self, exc_type, exc_val, tb)` signature on the
+  client. Was `*exc: Any` — works, but obscures the contract.
+- Dropped redundant `if daily_obs else None` ternaries inside the
+  `if daily_obs:` block in `shaping.build_response` (unreachable —
+  the outer guard already established truthiness). Same for hourly.
+
+No behavioural change. 111 tests still green. Agent A and C audits
+remain clean; this clears the last of Agent B's iter-2 backlog so
+the loop can converge.
+
 ## 0.3.1 (2026-05-12)
 
 **Iter-1 audit fixes** — two real bugs surfaced by an adversarial probe

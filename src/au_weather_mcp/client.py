@@ -64,7 +64,7 @@ class OpenMeteoClient:
     async def __aenter__(self) -> "OpenMeteoClient":
         return self
 
-    async def __aexit__(self, *exc: Any) -> None:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, tb: Any) -> None:
         await self.aclose()
 
     async def _fetch(self, url: str, kind: CacheKind) -> Any:

@@ -19,6 +19,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from rapidfuzz import fuzz
+
 from . import curated as curated_mod
 from .curated import CuratedLocation
 
@@ -219,8 +221,7 @@ def _try_fuzzy_curated(s: str, original: str, min_score: float = 85.0) -> Resolv
     matches = curated_mod.search(s, limit=1)
     if not matches:
         return None
-    # Re-score the top match explicitly using rapidfuzz to apply the threshold
-    from rapidfuzz import fuzz
+    # Re-score the top match explicitly to apply the min_score threshold
     top = matches[0]
     candidates = [top.id, top.name, f"{top.name} {top.state}"]
     best = max(fuzz.WRatio(s.lower(), c.lower()) for c in candidates)

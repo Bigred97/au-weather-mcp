@@ -198,13 +198,15 @@ def build_response(
 
     # Derive period bounds if caller didn't supply them — look at the
     # actual times we got back so the response is always self-consistent.
+    # Inside each branch the corresponding list/obs is already truthy, so
+    # no need for inner `if x else None` guards.
     if not start_period or not end_period:
         if daily_obs:
-            start_period = start_period or (daily_obs[0].date if daily_obs else None)
-            end_period = end_period or (daily_obs[-1].date if daily_obs else None)
+            start_period = start_period or daily_obs[0].date
+            end_period = end_period or daily_obs[-1].date
         elif hourly_obs:
-            start_period = start_period or (hourly_obs[0].time if hourly_obs else None)
-            end_period = end_period or (hourly_obs[-1].time if hourly_obs else None)
+            start_period = start_period or hourly_obs[0].time
+            end_period = end_period or hourly_obs[-1].time
         elif current_obs:
             start_period = start_period or current_obs.time
             end_period = end_period or current_obs.time
