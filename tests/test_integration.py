@@ -135,3 +135,76 @@ async def test_response_includes_full_attribution():
     assert "Open-Meteo" in resp.attribution
     assert "CC BY 4.0" in resp.attribution
     assert "Bureau of Meteorology" in resp.attribution
+
+
+# ---------- v0.4.0: live tests for new endpoints ----------
+
+async def test_air_quality_sydney_returns_real_data():
+    """End-to-end air-quality for Sydney."""
+    resp = await server.air_quality("sydney")
+    assert resp.location_id == "sydney"
+    assert resp.location_resolution == "curated"
+    assert resp.current is not None
+    # Sydney PM2.5 routinely 5-30 µg/m³ ambient; reject implausibles
+    if resp.current.pm2_5_ugm3 is not None:
+        assert 0 <= resp.current.pm2_5_ugm3 <= 500
+    if resp.current.european_aqi is not None:
+        assert 0 <= resp.current.european_aqi <= 500
+    # AQI label always populated when AQI is
+    if resp.current.european_aqi is not None:
+        assert resp.current.european_aqi_label is not None
+    # Trust contract
+    assert "open-meteo.com" in resp.source_url
+    assert "CC BY 4.0" in resp.attribution
+    assert resp.server_version
+
+
+async def test_air_quality_via_postcode_carries_osm_attribution():
+    """Postcode-resolved air quality should keep the OSM suffix that
+    weather responses carry — Nominatim still in the resolution chain."""
+    resp = await server.air_quality("2026")  # Bondi Beach postcode
+    assert resp.location_resolution == "postcode"
+    assert resp.current is not None
+    assert "OpenStreetMap" in resp.attribution
+    assert "ODbL" in resp.attribution
+
+
+async def test_compare_locations_four_capitals():
+    """Compare current weather across all four largest capitals."""
+    resp = await server.compare_locations(["sydney", "melbourne", "brisbane", "perth"])
+    assert resp.metric == "current"
+    assert len(resp.locations) == 4
+    ids = [r.location_id for r in resp.locations]
+    assert set(ids) == {"sydney", "melbourne", "brisbane", "perth"}
+    for row in resp.locations:
+        assert row.error is None, f"{row.location_id} errored: {row.error}"
+        assert row.current is not None
+        # Each location's temperature should be in the plausible AU range
+        if row.current.temperature_c is not None:
+            assert -10 <= row.current.temperature_c <= 50
+
+
+async def test_compare_locations_handles_mix_of_resolution_paths():
+    """One curated + one postcode + one geocoded — all in one comparison."""
+    resp = await server.compare_locations(["sydney", "2026", "Byron Bay"])
+    assert len(resp.locations) == 3
+    sources = {r.location_resolution for r in resp.locations}
+    assert sources == {"curated", "postcode", "geocoded"}
+    for row in resp.locations:
+        assert row.error is None, f"row {row.location_input!r} errored: {row.error}"
+        assert row.current is not None
+
+
+async def test_compare_locations_isolates_bad_input():
+    """One garbage input should NOT take down the whole call — it surfaces
+    on its own row's error field while the others succeed."""
+    resp = await server.compare_locations(["sydney", "Xenoluthia_fake_place_xyz"])
+    assert len(resp.locations) == 2
+    # Sydney should succeed
+    sydney_row = next(r for r in resp.locations if r.location_id == "sydney")
+    assert sydney_row.error is None
+    assert sydney_row.current is not None
+    # The fake place should report an error
+    bad_row = next(r for r in resp.locations if r.location_input == "Xenoluthia_fake_place_xyz")
+    assert bad_row.error is not None
+    assert bad_row.current is None

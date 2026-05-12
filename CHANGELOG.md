@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.4.0 (2026-05-13)
+
+**Coverage + capability expansion.** Doubles the curated set, adds an
+air-quality endpoint, and adds a multi-location comparison tool. All
+three are net-additive — no behavioural change for existing callers.
+
+- **21 → 45 curated locations.** 24 new regional centres covering every
+  AU population centre over ~25k. By state:
+  - NSW (+8): Tamworth, Wagga Wagga, Albury, Orange, Bathurst, Dubbo,
+    Coffs Harbour, Port Macquarie
+  - VIC (+3): Mildura, Shepparton, Warrnambool
+  - QLD (+4): Toowoomba (pop 135k), Rockhampton, Bundaberg, Hervey Bay
+  - WA (+4): Bunbury, Geraldton, Albany, Kalgoorlie
+  - SA (+2): Mount Gambier, Whyalla
+  - TAS (+2): Devonport, Burnie
+  - NT (+1): Katherine
+
+  Curated entries get fast-path lookup (no network) and appear in
+  `search_locations` / `list_curated`. Anything outside the 45 still
+  works via the place-name geocoder or postcode lookup.
+
+- **New tool: `air_quality(location)`** — current PM2.5, PM10, ozone,
+  NO₂, SO₂, CO concentrations in µg/m³, plus European AQI + US AQI
+  with plain-English labels ("Good", "Moderate", "Unhealthy", etc.).
+  Sourced from Open-Meteo's air-quality API (Copernicus CAMS merge).
+  Especially relevant during AU bushfire season (Oct–Mar) when smoke
+  can push PM2.5 above safe levels across whole regions. Same trust
+  contract as `latest()` — `source_url`, full attribution, server
+  version. OSM attribution surfaces when location is postcode-resolved.
+
+- **New tool: `compare_locations(locations)`** — side-by-side current
+  weather for 2–10 Australian locations in a single call. Fans out
+  concurrently via `asyncio.gather`, so all locations come back in
+  ~the time of a single fetch (after cache warm-up). Mixed input
+  shapes work: `["sydney","NSW","2026","-33.87,151.21"]` resolves
+  via curated/state/postcode/lat-lng respectively, all in one
+  response. A single bad input surfaces as an `error` field on its
+  own row without taking down the whole call.
+
+- **Diagnostic fix**: `Open-Meteo API request failed: <empty>` errors
+  no longer have empty detail when httpx raises an exception with
+  no string repr (e.g. some `RemoteProtocolError` variants). The
+  error type name is now surfaced.
+
+- **+9 regression tests** (4 unit + 5 live). 100 unit + 20 live = 120
+  total, all green.
+
 ## 0.3.4 (2026-05-12)
 
 **Iter-4 docs hygiene** — closes the last item found by the

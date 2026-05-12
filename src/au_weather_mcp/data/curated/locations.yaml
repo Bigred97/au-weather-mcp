@@ -228,3 +228,254 @@ locations:
     timezone: Australia/Perth
     elevation_m: 7
     nearest_bom_station: 003003 (Broome Airport)
+
+  # ============ v0.4.0 expansion: 24 regional centres ============
+  # All over ~25k population. Doubles coverage to 45 curated locations.
+  # Anything below 25k is still reachable via the place-name geocoder.
+
+  # ---------- NSW regional (additional 8) ----------
+  tamworth:
+    name: Tamworth
+    state: NSW
+    description: NSW New England region — country music capital, major regional centre.
+    latitude: -31.0833
+    longitude: 150.9333
+    timezone: Australia/Sydney
+    elevation_m: 404
+    nearest_bom_station: 055325 (Tamworth Airport)
+
+  wagga_wagga:
+    name: Wagga Wagga
+    state: NSW
+    description: NSW Riverina region — largest inland city.
+    latitude: -35.1167
+    longitude: 147.3667
+    timezone: Australia/Sydney
+    elevation_m: 147
+    nearest_bom_station: 072150 (Wagga Wagga AMO)
+
+  albury:
+    name: Albury
+    state: NSW
+    description: NSW–VIC border twin city on the Murray River.
+    latitude: -36.0833
+    longitude: 146.9167
+    timezone: Australia/Sydney
+    elevation_m: 165
+    nearest_bom_station: 072160 (Albury Airport AWS)
+
+  orange:
+    name: Orange
+    state: NSW
+    description: NSW Central West regional centre.
+    latitude: -33.2833
+    longitude: 149.1000
+    timezone: Australia/Sydney
+    elevation_m: 862
+    nearest_bom_station: 063303 (Orange Agricultural Institute)
+
+  bathurst:
+    name: Bathurst
+    state: NSW
+    description: NSW Central West — Australia's oldest inland European settlement.
+    latitude: -33.4167
+    longitude: 149.5833
+    timezone: Australia/Sydney
+    elevation_m: 670
+    nearest_bom_station: 063005 (Bathurst Agricultural Station)
+
+  dubbo:
+    name: Dubbo
+    state: NSW
+    description: NSW Orana — Western NSW regional hub.
+    latitude: -32.2500
+    longitude: 148.6167
+    timezone: Australia/Sydney
+    elevation_m: 275
+    nearest_bom_station: 065070 (Dubbo Airport AWS)
+
+  coffs_harbour:
+    name: Coffs Harbour
+    state: NSW
+    description: NSW Mid North Coast — coastal city.
+    latitude: -30.3000
+    longitude: 153.1167
+    timezone: Australia/Sydney
+    elevation_m: 5
+    nearest_bom_station: 059151 (Coffs Harbour Airport AWS)
+
+  port_macquarie:
+    name: Port Macquarie
+    state: NSW
+    description: NSW Mid North Coast — coastal regional centre.
+    latitude: -31.4333
+    longitude: 152.9000
+    timezone: Australia/Sydney
+    elevation_m: 4
+    nearest_bom_station: 060139 (Port Macquarie Airport AWS)
+
+  # ---------- VIC regional (additional 3) ----------
+  mildura:
+    name: Mildura
+    state: VIC
+    description: NW Victoria — Murray River fruit and wine region.
+    latitude: -34.2000
+    longitude: 142.1500
+    timezone: Australia/Melbourne
+    elevation_m: 50
+    nearest_bom_station: 076031 (Mildura Airport)
+
+  shepparton:
+    name: Shepparton
+    state: VIC
+    description: Goulburn Valley — major regional centre, food-bowl region.
+    latitude: -36.3833
+    longitude: 145.4000
+    timezone: Australia/Melbourne
+    elevation_m: 114
+    nearest_bom_station: 081125 (Shepparton Airport)
+
+  warrnambool:
+    name: Warrnambool
+    state: VIC
+    description: SW Victoria coast — gateway to the Great Ocean Road.
+    latitude: -38.3833
+    longitude: 142.4833
+    timezone: Australia/Melbourne
+    elevation_m: 18
+    nearest_bom_station: 090186 (Warrnambool Airport NDB)
+
+  # ---------- QLD regional (additional 4) ----------
+  toowoomba:
+    name: Toowoomba
+    state: QLD
+    description: Darling Downs — largest inland city in Queensland (pop 135k+).
+    latitude: -27.5667
+    longitude: 151.9500
+    timezone: Australia/Brisbane
+    elevation_m: 691
+    nearest_bom_station: 041529 (Toowoomba Airport)
+
+  rockhampton:
+    name: Rockhampton
+    state: QLD
+    description: Central Queensland — beef capital, on Tropic of Capricorn.
+    latitude: -23.3833
+    longitude: 150.5167
+    timezone: Australia/Brisbane
+    elevation_m: 10
+    nearest_bom_station: 039083 (Rockhampton Aero)
+
+  bundaberg:
+    name: Bundaberg
+    state: QLD
+    description: Wide Bay — sugar and rum region.
+    latitude: -24.8667
+    longitude: 152.3500
+    timezone: Australia/Brisbane
+    elevation_m: 28
+    nearest_bom_station: 039128 (Bundaberg Aero)
+
+  hervey_bay:
+    name: Hervey Bay
+    state: QLD
+    description: Fraser Coast — gateway to K'gari (Fraser Island).
+    latitude: -25.2833
+    longitude: 152.8333
+    timezone: Australia/Brisbane
+    elevation_m: 11
+    nearest_bom_station: 040405 (Hervey Bay Airport)
+
+  # ---------- WA regional (additional 4) ----------
+  bunbury:
+    name: Bunbury
+    state: WA
+    description: SW Western Australia — major port and regional centre.
+    latitude: -33.3333
+    longitude: 115.6333
+    timezone: Australia/Perth
+    elevation_m: 4
+    nearest_bom_station: 009965 (Bunbury)
+
+  geraldton:
+    name: Geraldton
+    state: WA
+    description: Mid West WA — coastal port and grain export hub.
+    latitude: -28.7833
+    longitude: 114.6167
+    timezone: Australia/Perth
+    elevation_m: 33
+    nearest_bom_station: 008051 (Geraldton Airport)
+
+  albany:
+    name: Albany
+    state: WA
+    description: Great Southern WA — south coast historic port.
+    latitude: -35.0167
+    longitude: 117.8833
+    timezone: Australia/Perth
+    elevation_m: 3
+    nearest_bom_station: 009741 (Albany Airport)
+
+  kalgoorlie:
+    name: Kalgoorlie
+    state: WA
+    description: Goldfields-Esperance WA — historic gold-mining city.
+    latitude: -30.7500
+    longitude: 121.4667
+    timezone: Australia/Perth
+    elevation_m: 360
+    nearest_bom_station: 012038 (Kalgoorlie-Boulder Airport)
+
+  # ---------- SA regional (additional 2) ----------
+  mount_gambier:
+    name: Mount Gambier
+    state: SA
+    description: SE South Australia — Blue Lake city, second-largest in SA.
+    latitude: -37.8333
+    longitude: 140.7833
+    timezone: Australia/Adelaide
+    elevation_m: 63
+    nearest_bom_station: 026021 (Mount Gambier Aero)
+
+  whyalla:
+    name: Whyalla
+    state: SA
+    description: Eyre Peninsula SA — steelworks and port city.
+    latitude: -33.0333
+    longitude: 137.5667
+    timezone: Australia/Adelaide
+    elevation_m: 12
+    nearest_bom_station: 018120 (Whyalla Aero)
+
+  # ---------- TAS regional (additional 2) ----------
+  devonport:
+    name: Devonport
+    state: TAS
+    description: NW Tasmania — Bass Strait ferry terminal.
+    latitude: -41.1833
+    longitude: 146.3500
+    timezone: Australia/Hobart
+    elevation_m: 8
+    nearest_bom_station: 091293 (Devonport Airport)
+
+  burnie:
+    name: Burnie
+    state: TAS
+    description: NW Tasmania — Bass Strait port city.
+    latitude: -41.0667
+    longitude: 145.9000
+    timezone: Australia/Hobart
+    elevation_m: 12
+    nearest_bom_station: 091245 (Burnie Round Hill)
+
+  # ---------- NT regional (additional 1) ----------
+  katherine:
+    name: Katherine
+    state: NT
+    description: Northern Territory — gateway to Katherine Gorge / Nitmiluk.
+    latitude: -14.4667
+    longitude: 132.2667
+    timezone: Australia/Darwin
+    elevation_m: 108
+    nearest_bom_station: 014902 (Tindal RAAF)

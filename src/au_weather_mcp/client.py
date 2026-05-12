@@ -30,6 +30,7 @@ from .cache import TTL, Cache, CacheKind
 FORECAST_BASE = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_BASE = "https://archive-api.open-meteo.com/v1/archive"
 GEOCODING_BASE = "https://geocoding-api.open-meteo.com/v1/search"
+AIR_QUALITY_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality"
 # Nominatim is used as a fallback for AU postcodes (Open-Meteo's geocoder
 # returns European cities for 4-digit numerics). Their TOS requires an
 # identifying User-Agent and a max of 1 req/sec; cached aggressively.
@@ -98,7 +99,10 @@ class OpenMeteoClient:
                 f"Open-Meteo API returned {e.response.status_code} for {url}: {reason}"
             ) from e
         except httpx.RequestError as e:
-            raise OpenMeteoError(f"Open-Meteo API request failed: {e}") from e
+            # Some httpx error classes have an empty str(); surface the type
+            # so a concurrency / pool / SSL failure isn't a mystery to debug.
+            detail = str(e) or type(e).__name__
+            raise OpenMeteoError(f"Open-Meteo API request failed: {detail}") from e
         try:
             data = resp.json()
         except json.JSONDecodeError as e:
@@ -147,6 +151,30 @@ class OpenMeteoClient:
             params["end_date"] = end_date
         url = f"{FORECAST_BASE}?{urlencode(params)}"
         return await self._fetch(url, kind=kind)
+
+    async def air_quality(
+        self,
+        latitude: float,
+        longitude: float,
+        timezone: str,
+        current: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Fetch current air-quality readings (PM2.5, PM10, AQI, etc.) for a
+        location. Sourced from Open-Meteo's air-quality API which merges
+        Copernicus CAMS European + global air-composition models.
+
+        Cached as 'current' kind — 15-minute TTL matches the upstream
+        update cadence.
+        """
+        params: dict[str, Any] = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "timezone": timezone,
+        }
+        if current:
+            params["current"] = ",".join(current)
+        url = f"{AIR_QUALITY_BASE}?{urlencode(params)}"
+        return await self._fetch(url, kind="current")
 
     async def geocode_postcode_au(self, postcode: str) -> dict[str, Any] | None:
         """Resolve a 4-digit Australian postcode to lat/lng + suburb via

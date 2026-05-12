@@ -199,10 +199,30 @@ async def test_get_weather_rejects_invalid_granularity():
 
 # ---------- list_curated ----------
 
-def test_list_curated_returns_sorted_21_ids():
+def test_list_curated_returns_sorted_45_ids():
     ids = server.list_curated()
-    assert len(ids) == 21
+    assert len(ids) == 45
     assert ids == sorted(ids)
-    # Spot-check expected entries are present
-    for required in ("sydney", "melbourne", "brisbane", "perth", "darwin", "alice_springs"):
+    # Spot-check expected entries are present from each state
+    for required in (
+        "sydney", "melbourne", "brisbane", "perth", "darwin", "alice_springs",
+        "tamworth", "toowoomba", "mildura", "bunbury", "mount_gambier", "katherine",
+    ):
         assert required in ids
+
+
+# ---------- v0.4.0: compare_locations ----------
+
+async def test_compare_locations_rejects_non_list():
+    with pytest.raises(ValueError, match="locations must be a list"):
+        await server.compare_locations("sydney")  # type: ignore[arg-type]
+
+
+async def test_compare_locations_rejects_too_few():
+    with pytest.raises(ValueError, match="requires at least 2"):
+        await server.compare_locations(["sydney"])
+
+
+async def test_compare_locations_rejects_too_many():
+    with pytest.raises(ValueError, match="at most 10"):
+        await server.compare_locations(["sydney"] * 11)

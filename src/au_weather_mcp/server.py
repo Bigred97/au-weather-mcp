@@ -15,22 +15,26 @@ from __future__ import annotations
 
 import asyncio
 import re
-from datetime import date as _date, timedelta
+from datetime import date as _date, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
 from pydantic import Field
 
 from . import curated as curated_mod
+from . import __version__
 from .client import OpenMeteoClient, OpenMeteoError
 from .models import (
     DEFAULT_ATTRIBUTION,
+    AirQualityResponse,
+    ComparisonResponse,
+    ComparisonRow,
     LocationDetail,
     LocationSummary,
     WeatherResponse,
 )
 from .resolution import ResolvedLocation, resolve_location
-from .shaping import build_response
+from .shaping import build_air_quality_response, build_response
 
 # Date strings: strictly YYYY-MM-DD. Anything else fails URL safety.
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -46,6 +50,10 @@ _DEFAULT_CURRENT_VARS = (
 # Hourly query asks for the same point-in-time variables as the "current"
 # block — just sampled at every hour instead of once. Same list either way.
 _DEFAULT_HOURLY_VARS = _DEFAULT_CURRENT_VARS
+_DEFAULT_AIR_QUALITY_VARS = (
+    "pm10,pm2_5,european_aqi,us_aqi,carbon_monoxide,nitrogen_dioxide,"
+    "sulphur_dioxide,ozone"
+).split(",")
 _DEFAULT_DAILY_VARS = (
     "temperature_2m_max,temperature_2m_min,apparent_temperature_max,"
     "apparent_temperature_min,precipitation_sum,rain_sum,wind_speed_10m_max,"
@@ -520,34 +528,262 @@ async def get_weather(
 
 
 @mcp.tool
-def list_curated() -> list[str]:
-    """List the 21 curated Australian location IDs supported by this MCP.
+async def air_quality(
+    location: Annotated[
+        str,
+        Field(
+            description=(
+                "Any Australian location. Same accepted shapes as latest(): "
+                "curated ID, place name, state code/name, postcode, or "
+                "'lat,lng' coordinates."
+            ),
+            examples=[
+                "sydney",
+                "Sydney",
+                "Byron Bay",
+                "2026",
+                "NSW",
+                "-33.87,151.21",
+            ],
+        ),
+    ],
+) -> AirQualityResponse:
+    """Return current air-quality readings for any Australian location.
 
-    The curated set covers all 8 state/territory capitals plus 13 major
-    regional centres:
-        - 8 capitals: sydney, melbourne, brisbane, perth, adelaide, hobart,
-          darwin, canberra
-        - 5 NSW regional: newcastle, wollongong (NSW capitals as above)
-        - 5 QLD regional: gold_coast, sunshine_coast, cairns, townsville, mackay
-        - 3 VIC regional: geelong, ballarat, bendigo
-        - 1 TAS regional: launceston
-        - 2 remote: alice_springs (NT), broome (WA)
+    Sourced from Open-Meteo's air-quality API, which merges Copernicus CAMS
+    European + global air-composition models. Returns PM2.5, PM10, ozone,
+    nitrogen dioxide, sulphur dioxide, carbon monoxide (all µg/m³), plus the
+    European and US AQI indices with plain-English labels.
 
-    Example:
-        ids = list_curated()
-        # → ['adelaide', 'alice_springs', 'ballarat', 'bendigo', 'brisbane',
-        #    'broome', 'cairns', 'canberra', 'darwin', 'geelong', 'gold_coast',
-        #    'hobart', 'launceston', 'mackay', 'melbourne', 'newcastle',
-        #    'perth', 'sunshine_coast', 'sydney', 'townsville', 'wollongong']
+    Especially useful during AU bushfire season (Oct–Mar) when smoke can
+    push PM2.5 above safe levels across whole regions.
+
+    Examples:
+        # Current Sydney air quality
+        resp = await air_quality("sydney")
+        # resp.current.pm2_5_ugm3 == 8.8
+        # resp.current.european_aqi == 21
+        # resp.current.european_aqi_label == 'Good'
+        # resp.current.us_aqi == 39
+        # resp.current.us_aqi_label == 'Good'
+
+        # Bushfire smoke check for the Blue Mountains
+        resp = await air_quality("-33.7,150.3")
+
+        # Brisbane CBD via postcode
+        resp = await air_quality("4000")
 
     When to use:
-        - You want to know which locations have first-class support
-        - You're building a UI that shows the supported set up front
+        - "Is the air clean enough to go for a run in <city>?"
+        - Bushfire smoke or burn-off impact checks
+        - Asthma / allergy planning
+        - Long-term air quality monitoring (call periodically and chart)
+
+    Returns:
+        AirQualityResponse with `current` populated (pollutants + AQI scales),
+        plus location metadata, source_url, attribution, and server_version.
+    """
+    client = await _get_client()
+    resolved = await _resolve(client, location)
+    try:
+        payload = await client.air_quality(
+            latitude=resolved.latitude,
+            longitude=resolved.longitude,
+            timezone=resolved.timezone,
+            current=_DEFAULT_AIR_QUALITY_VARS,
+        )
+    except OpenMeteoError as e:
+        raise ValueError(
+            f"Could not fetch air quality for {location!r} (resolved to "
+            f"{resolved.name}). ({e})"
+        ) from e
+    source_url = (
+        f"https://air-quality-api.open-meteo.com/v1/air-quality"
+        f"?latitude={resolved.latitude}&longitude={resolved.longitude}"
+        f"&timezone={resolved.timezone}"
+        f"&current={','.join(_DEFAULT_AIR_QUALITY_VARS)}"
+    )
+    return build_air_quality_response(
+        location=resolved,
+        payload=payload,
+        source_url=source_url,
+    )
+
+
+@mcp.tool
+async def compare_locations(
+    locations: Annotated[
+        list[str],
+        Field(
+            description=(
+                "Two to ten Australian locations to compare side-by-side. Each "
+                "entry accepts the same shapes as latest(): curated ID, place "
+                "name, state, postcode, or 'lat,lng'."
+            ),
+            examples=[
+                ["sydney", "melbourne", "brisbane", "perth"],
+                ["Cairns", "Hobart", "Darwin"],
+                ["2026", "3000", "4000"],
+            ],
+            min_length=2,
+            max_length=10,
+        ),
+    ],
+) -> ComparisonResponse:
+    """Compare current weather across multiple Australian locations in one call.
+
+    Fans out concurrently via asyncio.gather, so all locations come back in
+    roughly the time of a single call (after the cache is warm). Each location
+    is independently resolved (curated / state / postcode / geocode / etc.) and
+    independently fetched. If one location fails (e.g. geocoder can't find it),
+    that row gets an `error` field while the rest still return.
+
+    Examples:
+        # Capital-city dashboard
+        resp = await compare_locations(["sydney","melbourne","brisbane","perth"])
+        for row in resp.locations:
+            print(row.location_name, row.current.temperature_c)
+
+        # Tropical north today
+        resp = await compare_locations(["Cairns","Darwin","Townsville","Broome"])
+
+        # Mixed input shapes work
+        resp = await compare_locations(["sydney","NSW","2026","-33.87,151.21"])
+
+    When to use:
+        - "Compare weather in <several cities>" — the canonical use case
+        - Build a multi-region dashboard in one tool call
+        - Plan a holiday across regions
+
+    Returns:
+        ComparisonResponse with one ComparisonRow per input location.
+        Successful rows have `current` populated; failed rows have `error`.
+    """
+    # Validation: list of 2-10 non-empty strings
+    if not isinstance(locations, list):
+        raise ValueError(
+            f"locations must be a list of strings, got {type(locations).__name__}."
+        )
+    if len(locations) < 2:
+        raise ValueError(
+            f"compare_locations requires at least 2 locations, got {len(locations)}. "
+            "Use latest() for a single location."
+        )
+    if len(locations) > 10:
+        raise ValueError(
+            f"compare_locations supports at most 10 locations, got {len(locations)}. "
+            "Make multiple calls for larger comparisons."
+        )
+
+    client = await _get_client()
+
+    async def _resolve_and_fetch(loc_input: str) -> ComparisonRow:
+        """One row: resolve + fetch + wrap. Errors are caught and surfaced
+        on the row itself so one bad input doesn't take down the whole call."""
+        try:
+            resolved = await _resolve(client, loc_input)
+        except ValueError as e:
+            return ComparisonRow(
+                location_id=None,
+                location_name=str(loc_input),
+                state=None,
+                latitude=0.0,
+                longitude=0.0,
+                timezone="UTC",
+                location_resolution="curated",  # placeholder; ignored when error set
+                location_input=str(loc_input),
+                current=None,
+                source_url="",
+                error=f"could not resolve location: {e}",
+            )
+        try:
+            payload = await client.forecast(
+                latitude=resolved.latitude,
+                longitude=resolved.longitude,
+                timezone=resolved.timezone,
+                current=_DEFAULT_CURRENT_VARS,
+                forecast_days=1,
+                kind="current",
+            )
+        except OpenMeteoError as e:
+            return ComparisonRow(
+                location_id=resolved.curated_id,
+                location_name=resolved.name,
+                state=resolved.state,
+                latitude=resolved.latitude,
+                longitude=resolved.longitude,
+                timezone=resolved.timezone,
+                location_resolution=resolved.source,
+                location_input=resolved.original_input,
+                current=None,
+                source_url="",
+                error=f"upstream fetch failed: {e}",
+            )
+        source_url = (
+            f"https://api.open-meteo.com/v1/forecast?latitude={resolved.latitude}"
+            f"&longitude={resolved.longitude}&timezone={resolved.timezone}"
+            f"&current={','.join(_DEFAULT_CURRENT_VARS)}&forecast_days=1"
+        )
+        resp = build_response(
+            location=resolved,
+            payload=payload,
+            source_url=source_url,
+            user_query={"location": loc_input},
+        )
+        return ComparisonRow(
+            location_id=resp.location_id,
+            location_name=resp.location_name,
+            state=resp.state,
+            latitude=resp.latitude,
+            longitude=resp.longitude,
+            timezone=resp.timezone,
+            location_resolution=resp.location_resolution,
+            location_input=resp.location_input,
+            current=resp.current,
+            source_url=resp.source_url,
+            error=None,
+        )
+
+    rows = await asyncio.gather(*(_resolve_and_fetch(loc) for loc in locations))
+    return ComparisonResponse(
+        metric="current",
+        locations=rows,
+        retrieved_at=datetime.now(timezone.utc),
+        server_version=__version__,
+    )
+
+
+@mcp.tool
+def list_curated() -> list[str]:
+    """List the 45 curated Australian location IDs supported by this MCP.
+
+    The curated set covers all 8 state/territory capitals plus 37 major
+    regional centres. Any Australian place name outside this set still
+    works via the place-name geocoder; the curated entries just get
+    fast-path lookup (no network call) and appear in `search_locations`.
+
+    Coverage by state:
+        - 8 capitals: sydney, melbourne, brisbane, perth, adelaide, hobart,
+          darwin, canberra
+        - NSW regional (10): newcastle, wollongong, tamworth, wagga_wagga,
+          albury, orange, bathurst, dubbo, coffs_harbour, port_macquarie
+        - VIC regional (6): geelong, ballarat, bendigo, mildura, shepparton,
+          warrnambool
+        - QLD regional (9): gold_coast, sunshine_coast, cairns, townsville,
+          mackay, toowoomba, rockhampton, bundaberg, hervey_bay
+        - WA regional (5): broome, bunbury, geraldton, albany, kalgoorlie
+        - SA regional (2): mount_gambier, whyalla
+        - TAS regional (3): launceston, devonport, burnie
+        - NT regional (2): alice_springs, katherine
+
+    When to use:
+        - You want to enumerate which locations have first-class support
+        - You're building a UI / dashboard that needs the supported set up front
         - You want to plan a multi-location dashboard call
 
     Returns:
-        Sorted list of location IDs. Always 21 entries today; adding a
-        location is a YAML edit, not a code change.
+        Sorted list of location IDs (currently 45). Adding a location is
+        a YAML edit in src/au_weather_mcp/data/curated/locations.yaml.
     """
     return curated_mod.list_ids()
 

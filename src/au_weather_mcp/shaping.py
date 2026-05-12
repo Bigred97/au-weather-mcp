@@ -14,6 +14,8 @@ from . import __version__
 from .models import (
     DEFAULT_ATTRIBUTION,
     OSM_ATTRIBUTION_SUFFIX,
+    AirQualityObservation,
+    AirQualityResponse,
     DailyAggregate,
     WeatherObservation,
     WeatherResponse,
@@ -232,6 +234,87 @@ def build_response(
         current=current_obs,
         hourly=hourly_obs,
         daily=daily_obs,
+        attribution=attribution,
+        source_url=source_url,
+        retrieved_at=datetime.now(timezone.utc),
+        server_version=__version__,
+        stale=False,
+        stale_reason=None,
+    )
+
+
+# ---------- v0.4.0: air quality ----------
+
+# European AQI bands per Copernicus CAMS classification.
+_EU_AQI_LABELS = [
+    (20, "Good"),
+    (40, "Fair"),
+    (60, "Moderate"),
+    (80, "Poor"),
+    (100, "Very poor"),
+    (float("inf"), "Extremely poor"),
+]
+# US AQI bands per EPA.
+_US_AQI_LABELS = [
+    (50, "Good"),
+    (100, "Moderate"),
+    (150, "Unhealthy for sensitive groups"),
+    (200, "Unhealthy"),
+    (300, "Very unhealthy"),
+    (float("inf"), "Hazardous"),
+]
+
+
+def _label_aqi(value: int | None, bands: list[tuple[float, str]]) -> str | None:
+    """Map an integer AQI to the relevant band's plain-English label."""
+    if value is None:
+        return None
+    for upper, label in bands:
+        if value <= upper:
+            return label
+    return None
+
+
+def build_air_quality_response(
+    *,
+    location: ResolvedLocation,
+    payload: dict[str, Any],
+    source_url: str,
+) -> AirQualityResponse:
+    """Build the AirQualityResponse envelope. Same trust contract as
+    build_response — source_url, attribution, retrieved_at, server_version."""
+    current = payload.get("current") or {}
+    eu_aqi = current.get("european_aqi")
+    us_aqi = current.get("us_aqi")
+    observation = AirQualityObservation(
+        time=str(current.get("time", "")),
+        pm2_5_ugm3=current.get("pm2_5"),
+        pm10_ugm3=current.get("pm10"),
+        ozone_ugm3=current.get("ozone"),
+        nitrogen_dioxide_ugm3=current.get("nitrogen_dioxide"),
+        sulphur_dioxide_ugm3=current.get("sulphur_dioxide"),
+        carbon_monoxide_ugm3=current.get("carbon_monoxide"),
+        european_aqi=eu_aqi,
+        us_aqi=us_aqi,
+        european_aqi_label=_label_aqi(eu_aqi, _EU_AQI_LABELS),
+        us_aqi_label=_label_aqi(us_aqi, _US_AQI_LABELS),
+    ) if current else None
+
+    # OSM attribution carries over when the location was postcode-resolved
+    attribution = DEFAULT_ATTRIBUTION
+    if location.source == "postcode":
+        attribution += OSM_ATTRIBUTION_SUFFIX
+
+    return AirQualityResponse(
+        location_id=location.curated_id,
+        location_name=location.name,
+        state=location.state,
+        latitude=location.latitude,
+        longitude=location.longitude,
+        timezone=location.timezone,
+        location_resolution=location.source,
+        location_input=location.original_input,
+        current=observation,
         attribution=attribution,
         source_url=source_url,
         retrieved_at=datetime.now(timezone.utc),

@@ -207,3 +207,76 @@ class WeatherResponse(BaseModel):
     server_version: str
     stale: bool = False
     stale_reason: str | None = None
+
+
+# ---------- v0.4.0: air quality ----------
+
+class AirQualityObservation(BaseModel):
+    """Current air-quality reading. Concentrations in µg/m³; AQI scales unitless.
+
+    European AQI: 0-20 good, 20-40 fair, 40-60 moderate, 60-80 poor,
+    80-100 very poor, >100 extremely poor.
+    US AQI: 0-50 good, 51-100 moderate, 101-150 unhealthy for sensitive,
+    151-200 unhealthy, 201-300 very unhealthy, >300 hazardous.
+    """
+    time: str
+    pm2_5_ugm3: float | None = None
+    pm10_ugm3: float | None = None
+    ozone_ugm3: float | None = None
+    nitrogen_dioxide_ugm3: float | None = None
+    sulphur_dioxide_ugm3: float | None = None
+    carbon_monoxide_ugm3: float | None = None
+    european_aqi: int | None = None
+    us_aqi: int | None = None
+    european_aqi_label: str | None = None  # plain-English label derived from EU AQI
+    us_aqi_label: str | None = None  # plain-English label derived from US AQI
+
+
+class AirQualityResponse(BaseModel):
+    """Air-quality response envelope. Same trust contract as WeatherResponse:
+    source_url, attribution, retrieved_at, server_version, location_resolution."""
+    location_id: str | None
+    location_name: str
+    state: str | None
+    latitude: float
+    longitude: float
+    timezone: str
+    location_resolution: LocationResolution
+    location_input: str
+    current: AirQualityObservation | None = None
+    source: str = "Open-Meteo Air Quality (CAMS European + global merge)"
+    attribution: str = DEFAULT_ATTRIBUTION
+    source_url: str
+    retrieved_at: datetime
+    server_version: str
+    stale: bool = False
+    stale_reason: str | None = None
+
+
+# ---------- v0.4.0: multi-location comparison ----------
+
+class ComparisonRow(BaseModel):
+    """One location's slice of a multi-location comparison."""
+    location_id: str | None
+    location_name: str
+    state: str | None
+    latitude: float
+    longitude: float
+    timezone: str
+    location_resolution: LocationResolution
+    location_input: str
+    current: WeatherObservation | None = None
+    source_url: str
+    error: str | None = None  # populated if this location failed to resolve / fetch
+
+
+class ComparisonResponse(BaseModel):
+    """Side-by-side weather comparison across N locations. Each ComparisonRow
+    has the same shape so agents can iterate cleanly. Failed rows surface
+    an `error` field rather than crashing the whole call."""
+    metric: str  # 'current' is the only metric in v0.4.0; reserved for future
+    locations: list[ComparisonRow]
+    retrieved_at: datetime
+    server_version: str
+    source: str = "Open-Meteo (aggregates Bureau of Meteorology data under licence)"
+    attribution: str = DEFAULT_ATTRIBUTION

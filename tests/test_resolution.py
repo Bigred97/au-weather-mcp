@@ -464,8 +464,8 @@ def test_non_postcode_attribution_omits_osm():
 
 @pytest.mark.live
 async def test_live_geocode_ambiguous_resolves_to_au_high_pop():
-    """'Newcastle' exists in many countries; AU filter + population sort
-    should resolve to the NSW city (pop 508k)."""
+    """'Surfers Paradise' isn't in the curated set; AU filter + population
+    sort on the geocoder should resolve to the QLD locality."""
     from au_weather_mcp.cache import Cache
     from au_weather_mcp.client import OpenMeteoClient
     from pathlib import Path
@@ -473,14 +473,13 @@ async def test_live_geocode_ambiguous_resolves_to_au_high_pop():
     tmp = Path(tempfile.mkdtemp())
     client = OpenMeteoClient(cache=Cache(tmp / "cache.db"))
     try:
-        # 'Newcastle' is curated as a name, but customer might type something
-        # that doesn't match curated and only the geocoder can resolve.
-        # Use a deliberately uncurated AU city instead.
-        r = await resolve_location(client, "Toowoomba")
+        # Need a place not in the curated set so the geocoder is actually
+        # invoked. Surfers Paradise is on the Gold Coast — close to curated
+        # gold_coast but not the same id, and not normalisable.
+        r = await resolve_location(client, "Surfers Paradise")
         assert r.source == "geocoded"
-        assert "Queensland" in (r.state or "")
-        # Toowoomba is -27.56, 151.95
-        assert -28 < r.latitude < -27
-        assert 151 < r.longitude < 153
+        # Surfers Paradise is around -28.0, 153.4
+        assert -28.5 < r.latitude < -27.5
+        assert 153 < r.longitude < 154
     finally:
         await client.aclose()

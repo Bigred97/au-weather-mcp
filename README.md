@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Ask Claude about Australian weather and get real, current numbers** — not "I don't have access to that data." This MCP server gives Claude (and other MCP clients like Cursor) live access to Australian weather data via [Open-Meteo](https://open-meteo.com), which aggregates Bureau of Meteorology observations under licence. Plain-English location keys (`sydney`, `cairns`, `alice_springs`), 80+ years of historical data, 16-day forecasts.
+**Ask Claude about Australian weather and air quality and get real, current numbers** — not "I don't have access to that data." This MCP server gives Claude (and other MCP clients like Cursor) live access to Australian weather + air-quality data via [Open-Meteo](https://open-meteo.com), which aggregates Bureau of Meteorology observations under licence. 45 curated locations (every state capital + every regional centre over ~25k), postcode and place-name lookup, current observations, 16-day forecasts, 80+ years of historical data, and multi-location comparison.
 
 Companion to [abs-mcp](https://github.com/Bigred97/abs-mcp) (ABS macro stats), [rba-mcp](https://github.com/Bigred97/rba-mcp) (Reserve Bank), and [ato-mcp](https://github.com/Bigred97/ato-mcp) (tax + charity register) — together the four cover Australia's most-asked public data.
 
@@ -94,11 +94,13 @@ Add to `~/.cursor/mcp.json`:
 
 | Tool | What it does |
 |---|---|
-| `search_locations(query, limit=10)` | Fuzzy-search the 21 curated AU locations by name, state, or description. |
+| `search_locations(query, limit=10)` | Fuzzy-search the 45 curated AU locations by name, state, or description. |
 | `describe_location(location)` | Lat/lng, timezone, elevation, nearest BOM station, and the canonical Open-Meteo URL. |
 | `latest(location)` | Current weather observation — temp, humidity, wind, rain, pressure. 15-min cache. |
 | `get_weather(location, start_date, end_date, granularity)` | Time-series query. Auto-routes to historical archive (1940+) or forecast (today + 16 days). Daily or hourly granularity. |
-| `list_curated()` | All 21 supported location IDs. |
+| `air_quality(location)` | Current PM2.5, PM10, ozone, NO₂, SO₂, CO + European & US AQI with plain-English labels. *(v0.4.0)* |
+| `compare_locations([locs])` | Side-by-side current weather for 2–10 locations in one call. Fans out concurrently. *(v0.4.0)* |
+| `list_curated()` | All 45 supported location IDs. |
 
 ## Accepts almost any input shape
 
@@ -118,16 +120,18 @@ Every response includes a `location_resolution` field with one of `curated`, `st
 
 ## Curated locations
 
-21 locations covering all 8 state/territory capitals plus 13 major regional centres:
+**45 curated locations** covering all 8 state/territory capitals plus 37 major regional centres (every AU population centre over ~25k). Anything outside the curated set still works via the place-name geocoder or postcode lookup.
 
 | Region | Locations |
 |---|---|
 | **Capitals (8)** | `sydney` · `melbourne` · `brisbane` · `perth` · `adelaide` · `hobart` · `darwin` · `canberra` |
-| **NSW regional** | `newcastle` · `wollongong` |
-| **QLD regional** | `gold_coast` · `sunshine_coast` · `cairns` · `townsville` · `mackay` |
-| **VIC regional** | `geelong` · `ballarat` · `bendigo` |
-| **TAS regional** | `launceston` |
-| **Remote** | `alice_springs` (NT) · `broome` (WA) |
+| **NSW regional (10)** | `newcastle` · `wollongong` · `tamworth` · `wagga_wagga` · `albury` · `orange` · `bathurst` · `dubbo` · `coffs_harbour` · `port_macquarie` |
+| **QLD regional (9)** | `gold_coast` · `sunshine_coast` · `cairns` · `townsville` · `mackay` · `toowoomba` · `rockhampton` · `bundaberg` · `hervey_bay` |
+| **VIC regional (6)** | `geelong` · `ballarat` · `bendigo` · `mildura` · `shepparton` · `warrnambool` |
+| **WA regional (5)** | `broome` · `bunbury` · `geraldton` · `albany` · `kalgoorlie` |
+| **SA regional (2)** | `mount_gambier` · `whyalla` |
+| **TAS regional (3)** | `launceston` · `devonport` · `burnie` |
+| **NT regional (2)** | `alice_springs` · `katherine` |
 
 Coordinates are anchored to the canonical BOM observation point for each city (e.g. Sydney = Observatory Hill, Melbourne = Olympic Park) so cross-checking against BOM's official observations is straightforward. See [src/au_weather_mcp/data/curated/locations.yaml](src/au_weather_mcp/data/curated/locations.yaml) for the full registry.
 

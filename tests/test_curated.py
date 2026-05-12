@@ -13,11 +13,32 @@ def reset_registry():
     curated.reset_registry()
 
 
-def test_list_ids_returns_21_locations():
-    """The curated set is documented as 21 locations; this catches accidental
-    YAML adds/removes that drift from the docs."""
+def test_list_ids_returns_45_locations():
+    """The curated set is documented as 45 locations (post v0.4.0); this
+    catches accidental YAML adds/removes that drift from the docs."""
     ids = curated.list_ids()
-    assert len(ids) == 21, f"Expected 21 curated locations, got {len(ids)}: {ids}"
+    assert len(ids) == 45, f"Expected 45 curated locations, got {len(ids)}: {ids}"
+
+
+def test_v04_regional_additions_loaded():
+    """v0.4.0 added 24 regional centres. Spot-check one from each state."""
+    spot_check = {
+        "tamworth": ("NSW", -32, -30),
+        "wagga_wagga": ("NSW", -36, -34),
+        "toowoomba": ("QLD", -28, -27),
+        "mildura": ("VIC", -35, -33),
+        "bunbury": ("WA", -34, -32),
+        "mount_gambier": ("SA", -38, -37),
+        "devonport": ("TAS", -42, -41),
+        "katherine": ("NT", -15, -13),
+    }
+    for loc_id, (state, lat_min, lat_max) in spot_check.items():
+        loc = curated.get(loc_id)
+        assert loc is not None, f"{loc_id} missing from curated set"
+        assert loc.state == state, f"{loc_id} state {loc.state!r} != {state!r}"
+        assert lat_min <= loc.latitude <= lat_max, (
+            f"{loc_id} lat {loc.latitude} outside expected band"
+        )
 
 
 def test_all_capitals_present():
