@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.3 (2026-05-13)
+
+**Iter-3 cleanup.** Adversarial probe 5/5 PASS, trust audit 3/3 PASS,
+code review found one remaining doc-drift: `curated.py`'s module
+docstring still said "21 AU places" — same class of drift v0.4.2
+fixed in `list_curated()`'s docstring, just missed at the module
+level. Now says 45.
+
+No code or behaviour change. 102 unit + 20 live tests still green.
+
 ## 0.4.2 (2026-05-13)
 
 **Iter-2 audit cleanups.** Agent C PASS, Agent A 0 bugs, Agent B and

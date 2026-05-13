@@ -1,4 +1,4 @@
-"""Curated location registry — the 21 AU places we hand-pick coordinates for.
+"""Curated location registry — the 45 AU places we hand-pick coordinates for.
 
 The YAML at `data/curated/locations.yaml` is the source of truth. Loaded
 once on first access and cached in `_REGISTRY`. Anyone can add a location
