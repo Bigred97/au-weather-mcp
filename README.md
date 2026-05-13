@@ -4,6 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Glama MCP server quality](https://glama.ai/mcp/servers/Bigred97/au-weather-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Bigred97/au-weather-mcp)
 
 **Ask Claude about Australian weather and air quality and get real, current numbers** — not "I don't have access to that data." This MCP server gives Claude (and other MCP clients like Cursor) live access to Australian weather + air-quality data via [Open-Meteo](https://open-meteo.com), which aggregates Bureau of Meteorology observations under licence. 45 curated locations (every state capital + every regional centre over ~25k), postcode and place-name lookup, current observations, 16-day forecasts, 80+ years of historical data, and multi-location comparison.
 
