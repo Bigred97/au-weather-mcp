@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "au-weather-mcp"
-version = "0.4.3"
+version = "0.4.4"
 description = "MCP server for Australian weather + air quality. 45 curated locations + postcode/place-name lookup. Current observations, 16-day forecasts, 80+ years of historical data, air quality (PM2.5 / AQI), and multi-location comparison. Sourced via Open-Meteo (aggregates Bureau of Meteorology data under licence)."
 readme = "README.md"
 requires-python = ">=3.11"

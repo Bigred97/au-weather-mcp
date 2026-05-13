@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.4 (2026-05-13)
+
+**First PyPI release via Trusted Publishing (OIDC).** No code changes vs
+0.4.3 — this release exists to fire the `release.yml` workflow (which was
+added 41 minutes after `v0.4.3` was tagged) and publish the wheel to PyPI
+for the first time using PyPI's OpenID Connect trusted-publisher flow.
+No long-lived API tokens in the repo. 102 unit + 20 live tests still green.
+
+Install: `uvx --upgrade au-weather-mcp`.
+
 ## 0.4.3 (2026-05-13)
 
 **Iter-3 cleanup.** Adversarial probe 5/5 PASS, trust audit 3/3 PASS,
