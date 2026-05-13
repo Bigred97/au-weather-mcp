@@ -17,6 +17,7 @@ import asyncio
 import re
 from datetime import date as _date, datetime, timedelta, timezone
 from typing import Annotated, Any, Literal
+from urllib.parse import urlencode
 
 from fastmcp import FastMCP
 from pydantic import Field
@@ -597,11 +598,17 @@ async def air_quality(
             f"Could not fetch air quality for {location!r} (resolved to "
             f"{resolved.name}). ({e})"
         ) from e
+    # Build source_url via the same urlencode the client uses so the URL
+    # advertised in the response is byte-identical to the URL Open-Meteo
+    # actually served (audit-flagged round-trip fidelity).
     source_url = (
-        f"https://air-quality-api.open-meteo.com/v1/air-quality"
-        f"?latitude={resolved.latitude}&longitude={resolved.longitude}"
-        f"&timezone={resolved.timezone}"
-        f"&current={','.join(_DEFAULT_AIR_QUALITY_VARS)}"
+        "https://air-quality-api.open-meteo.com/v1/air-quality?"
+        + urlencode({
+            "latitude": resolved.latitude,
+            "longitude": resolved.longitude,
+            "timezone": resolved.timezone,
+            "current": ",".join(_DEFAULT_AIR_QUALITY_VARS),
+        })
     )
     return build_air_quality_response(
         location=resolved,
@@ -678,8 +685,16 @@ async def compare_locations(
     client = await _get_client()
 
     async def _resolve_and_fetch(loc_input: str) -> ComparisonRow:
-        """One row: resolve + fetch + wrap. Errors are caught and surfaced
-        on the row itself so one bad input doesn't take down the whole call."""
+        """One row: resolve + fetch + wrap.
+
+        Trust contract: one row failing must NOT poison sibling rows in
+        the gather. We catch ValueError and OpenMeteoError specifically
+        (for nicer error messages) AND a broad Exception fallback so any
+        unanticipated upstream issue (pydantic ValidationError from a
+        sanity-check tripping on bad upstream values, an httpx error not
+        wrapped as OpenMeteoError, etc.) becomes an error on the row
+        rather than crashing the whole call.
+        """
         try:
             resolved = await _resolve(client, loc_input)
         except ValueError as e:
@@ -696,6 +711,32 @@ async def compare_locations(
                 source_url="",
                 error=f"could not resolve location: {e}",
             )
+        except Exception as e:  # noqa: BLE001 — deliberate broad isolation barrier
+            return ComparisonRow(
+                location_id=None,
+                location_name=str(loc_input),
+                state=None,
+                latitude=0.0,
+                longitude=0.0,
+                timezone="UTC",
+                location_resolution="curated",
+                location_input=str(loc_input),
+                current=None,
+                source_url="",
+                error=f"unexpected resolve error ({type(e).__name__}): {e}",
+            )
+        # Build source_url via urlencode so it byte-matches the URL the
+        # client actually hits (audit-flagged round-trip fidelity).
+        source_url = (
+            "https://api.open-meteo.com/v1/forecast?"
+            + urlencode({
+                "latitude": resolved.latitude,
+                "longitude": resolved.longitude,
+                "timezone": resolved.timezone,
+                "current": ",".join(_DEFAULT_CURRENT_VARS),
+                "forecast_days": 1,
+            })
+        )
         try:
             payload = await client.forecast(
                 latitude=resolved.latitude,
@@ -704,6 +745,12 @@ async def compare_locations(
                 current=_DEFAULT_CURRENT_VARS,
                 forecast_days=1,
                 kind="current",
+            )
+            resp = build_response(
+                location=resolved,
+                payload=payload,
+                source_url=source_url,
+                user_query={"location": loc_input},
             )
         except OpenMeteoError as e:
             return ComparisonRow(
@@ -716,20 +763,23 @@ async def compare_locations(
                 location_resolution=resolved.source,
                 location_input=resolved.original_input,
                 current=None,
-                source_url="",
+                source_url=source_url,
                 error=f"upstream fetch failed: {e}",
             )
-        source_url = (
-            f"https://api.open-meteo.com/v1/forecast?latitude={resolved.latitude}"
-            f"&longitude={resolved.longitude}&timezone={resolved.timezone}"
-            f"&current={','.join(_DEFAULT_CURRENT_VARS)}&forecast_days=1"
-        )
-        resp = build_response(
-            location=resolved,
-            payload=payload,
-            source_url=source_url,
-            user_query={"location": loc_input},
-        )
+        except Exception as e:  # noqa: BLE001 — isolation barrier; see docstring
+            return ComparisonRow(
+                location_id=resolved.curated_id,
+                location_name=resolved.name,
+                state=resolved.state,
+                latitude=resolved.latitude,
+                longitude=resolved.longitude,
+                timezone=resolved.timezone,
+                location_resolution=resolved.source,
+                location_input=resolved.original_input,
+                current=None,
+                source_url=source_url,
+                error=f"unexpected fetch/parse error ({type(e).__name__}): {e}",
+            )
         return ComparisonRow(
             location_id=resp.location_id,
             location_name=resp.location_name,

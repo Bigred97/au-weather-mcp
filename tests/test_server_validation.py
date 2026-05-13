@@ -226,3 +226,70 @@ async def test_compare_locations_rejects_too_few():
 async def test_compare_locations_rejects_too_many():
     with pytest.raises(ValueError, match="at most 10"):
         await server.compare_locations(["sydney"] * 11)
+
+
+async def test_compare_locations_isolates_unexpected_exception(monkeypatch):
+    """REGRESSION (v0.4.0 iter-1 audit): if one row's fetch raises an
+    *unexpected* exception (e.g. pydantic ValidationError from a sanity
+    check, or an httpx error not wrapped as OpenMeteoError), the previous
+    code only caught ValueError/OpenMeteoError — the whole asyncio.gather
+    crashed, poisoning sibling rows. Now: a broad Exception barrier turns
+    any failure into a row-level error.
+    """
+    from au_weather_mcp.client import OpenMeteoClient
+
+    # Patch _get_client to return a stub that raises RuntimeError mid-fetch
+    # for the "sydney" call. melbourne should still succeed.
+    real_forecast = OpenMeteoClient.forecast
+
+    async def boom_for_sydney(self, *, latitude, **kwargs):
+        if abs(latitude - (-33.8607)) < 0.01:
+            # Sydney coords — raise an unexpected exception type
+            raise RuntimeError("simulated upstream library bug")
+        return await real_forecast(self, latitude=latitude, **kwargs)
+
+    monkeypatch.setattr(OpenMeteoClient, "forecast", boom_for_sydney)
+
+    resp = await server.compare_locations(["sydney", "melbourne"])
+    assert len(resp.locations) == 2
+    sydney_row = next(r for r in resp.locations if r.location_id == "sydney")
+    melbourne_row = next(r for r in resp.locations if r.location_id == "melbourne")
+    # sydney row must surface the error, not crash the call
+    assert sydney_row.error is not None
+    assert "RuntimeError" in sydney_row.error
+    assert "simulated upstream library bug" in sydney_row.error
+    # melbourne row must still succeed
+    assert melbourne_row.error is None
+    assert melbourne_row.current is not None
+
+
+async def test_air_quality_source_url_round_trips_via_urlencode():
+    """REGRESSION (v0.4.0 iter-1 audit): source_url advertised in the
+    response must be byte-identical to the URL the client actually hits.
+    Previously the server built the URL with raw commas in `current=...`
+    while the client built it via urlencode (percent-encoded commas)."""
+    from au_weather_mcp.client import OpenMeteoClient, AIR_QUALITY_BASE
+
+    captured = {}
+
+    async def fake_air_quality(self, *, latitude, longitude, timezone, current):
+        captured["url"] = (
+            f"{AIR_QUALITY_BASE}?"
+            + __import__("urllib.parse", fromlist=["urlencode"]).urlencode({
+                "latitude": latitude,
+                "longitude": longitude,
+                "timezone": timezone,
+                "current": ",".join(current),
+            })
+        )
+        return {"current": {"time": "2026-05-13T11:00", "pm2_5": 5.0}}
+
+    from au_weather_mcp.client import OpenMeteoClient as _OMC
+    import au_weather_mcp.server as _srv
+    # Monkey-patch via the server's client instance fetch
+    import unittest.mock as _mock
+    with _mock.patch.object(_OMC, "air_quality", fake_air_quality):
+        resp = await server.air_quality("sydney")
+    assert resp.source_url == captured["url"], (
+        f"source_url mismatch:\n  response: {resp.source_url}\n  actual: {captured['url']}"
+    )

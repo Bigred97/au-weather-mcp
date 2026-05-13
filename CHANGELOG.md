@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.4.1 (2026-05-13)
+
+**Iter-1 audit fixes** on v0.4.0. Agent A (adversarial) found 0 bugs,
+Agent C (trust) PASS, Agent B (code review) flagged 4 real items — all
+addressed here.
+
+- **Fix: `compare_locations` row isolation.** The fan-out previously
+  only caught `ValueError` (from resolve) and `OpenMeteoError` (from
+  fetch). A `pydantic.ValidationError` from a sanity check tripping on
+  upstream bad data, or any `httpx` error not wrapped as
+  `OpenMeteoError`, would crash the whole `asyncio.gather` and poison
+  every sibling row — defeating the documented "one row failing must
+  not poison others" contract. Now: broad `except Exception` barrier
+  around both stages of `_resolve_and_fetch` turns any failure into a
+  per-row `error` field. Regression test simulates an `httpx`-level
+  `RuntimeError` mid-gather; the other rows still succeed.
+- **Fix: `source_url` round-trip fidelity (air_quality).** The
+  `source_url` advertised on `AirQualityResponse` was built with raw
+  commas in `current=pm10,pm2_5,…`, but `client.air_quality()` uses
+  `urlencode()` which percent-encodes commas. The advertised URL was
+  not byte-identical to the URL Open-Meteo actually served — a
+  citation footgun. Now built via the same `urlencode()` call.
+- **Fix: `source_url` round-trip fidelity (compare_locations rows).**
+  Same pattern inside the fan-out: row `source_url` now built via
+  `urlencode()` to match `client.forecast()`.
+- **Cleanup: `shaping.build_air_quality_response`.** Removed
+  contradictory `current = payload.get("current") or {}` then
+  `if current else None` — the `or {}` masked an `observation = None`
+  fall-through. Cleaner: gate on `payload.get("current")` directly,
+  surface `None` cleanly when upstream returns no current block.
+- **Hardening: `__init__.py` against `_version() → None`.** Stale
+  editable-install dist-info can cause `importlib.metadata.version()`
+  to return `None` instead of raising `PackageNotFoundError`, leaving
+  `__version__ = None` and breaking every `server_version` field
+  (Pydantic `str` validation fails). Added `or "0.0.0+unknown"`
+  fallback so `__version__` is always a non-empty string.
+- **+2 regression tests** locking in the row-isolation fix and the
+  source_url urlencode round-trip. 102 unit + 20 live = 122 total,
+  all green.
+
 ## 0.4.0 (2026-05-13)
 
 **Coverage + capability expansion.** Doubles the curated set, adds an

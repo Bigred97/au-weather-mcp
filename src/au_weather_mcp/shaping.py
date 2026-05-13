@@ -283,22 +283,30 @@ def build_air_quality_response(
 ) -> AirQualityResponse:
     """Build the AirQualityResponse envelope. Same trust contract as
     build_response — source_url, attribution, retrieved_at, server_version."""
-    current = payload.get("current") or {}
-    eu_aqi = current.get("european_aqi")
-    us_aqi = current.get("us_aqi")
-    observation = AirQualityObservation(
-        time=str(current.get("time", "")),
-        pm2_5_ugm3=current.get("pm2_5"),
-        pm10_ugm3=current.get("pm10"),
-        ozone_ugm3=current.get("ozone"),
-        nitrogen_dioxide_ugm3=current.get("nitrogen_dioxide"),
-        sulphur_dioxide_ugm3=current.get("sulphur_dioxide"),
-        carbon_monoxide_ugm3=current.get("carbon_monoxide"),
-        european_aqi=eu_aqi,
-        us_aqi=us_aqi,
-        european_aqi_label=_label_aqi(eu_aqi, _EU_AQI_LABELS),
-        us_aqi_label=_label_aqi(us_aqi, _US_AQI_LABELS),
-    ) if current else None
+    # Open-Meteo returns the current block only when at least one variable
+    # was requested + returned. If `current` is missing or empty we surface
+    # `observation = None` so the agent can distinguish "no data" from
+    # "all values were null".
+    current = payload.get("current")
+    observation: AirQualityObservation | None
+    if current:
+        eu_aqi = current.get("european_aqi")
+        us_aqi = current.get("us_aqi")
+        observation = AirQualityObservation(
+            time=str(current.get("time", "")),
+            pm2_5_ugm3=current.get("pm2_5"),
+            pm10_ugm3=current.get("pm10"),
+            ozone_ugm3=current.get("ozone"),
+            nitrogen_dioxide_ugm3=current.get("nitrogen_dioxide"),
+            sulphur_dioxide_ugm3=current.get("sulphur_dioxide"),
+            carbon_monoxide_ugm3=current.get("carbon_monoxide"),
+            european_aqi=eu_aqi,
+            us_aqi=us_aqi,
+            european_aqi_label=_label_aqi(eu_aqi, _EU_AQI_LABELS),
+            us_aqi_label=_label_aqi(us_aqi, _US_AQI_LABELS),
+        )
+    else:
+        observation = None
 
     # OSM attribution carries over when the location was postcode-resolved
     attribution = DEFAULT_ATTRIBUTION
