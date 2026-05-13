@@ -1,0 +1,69 @@
+name: release
+
+# Push a tag like v0.4.3 → wheel is built and published to PyPI via
+# Trusted Publishing (no API token in repo secrets). One-time setup:
+#
+#   For a NEW project (au-weather-mcp doesn't exist on PyPI yet):
+#     1. https://pypi.org/manage/account/publishing/
+#     2. Click "Add a new pending publisher" and fill in:
+#          PyPI Project Name = au-weather-mcp
+#          Owner             = Bigred97
+#          Repository name   = au-weather-mcp
+#          Workflow name     = release.yml
+#          Environment name  = pypi
+#     3. Once a tag is pushed, PyPI creates the project from the first
+#        publish — the "pending" entry promotes to a regular trusted
+#        publisher on that first successful upload.
+#
+#   For an EXISTING project (later releases):
+#     1. https://pypi.org/manage/project/au-weather-mcp/settings/publishing/
+#     2. Same fields; "Add a trusted publisher" (no longer pending).
+#
+#   Repo side (one-time):
+#     - Repo Settings → Environments → New environment named `pypi`.
+#       No secrets needed; the environment scopes the OIDC token PyPI
+#       hands out, so only this workflow + this environment can publish.
+#
+# Then any `git push origin vX.Y.Z` triggers this job. No tokens to
+# rotate, no scope drift, no transcript-leak risk.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/au-weather-mcp/
+    permissions:
+      id-token: write     # required for Trusted Publishing OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sanity-check the tag matches pyproject.toml
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PYPROJECT_VERSION=$(uv run python -c "import tomllib,sys; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pyproject version $PYPROJECT_VERSION"
+            exit 1
+          fi
+          echo "Releasing version $PYPROJECT_VERSION"
+
+      - name: Build wheel + sdist
+        run: uv build
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
