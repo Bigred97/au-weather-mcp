@@ -144,12 +144,12 @@ async def search_locations(
         ),
     ] = 10,
 ) -> list[LocationSummary]:
-    """Fuzzy-search the 21 curated Australian locations.
+    """Fuzzy-search the 45 curated Australian locations.
 
-    The curated set covers all 8 state/territory capitals plus 13 major
-    regional centres (Newcastle, Wollongong, Gold Coast, Sunshine Coast,
-    Cairns, Townsville, Mackay, Geelong, Ballarat, Bendigo, Launceston,
-    Alice Springs, Broome).
+    The curated set covers all 8 state/territory capitals plus 37 major
+    regional centres (every AU population centre over ~25k). Anything
+    outside the curated set still resolves via place-name geocoding or
+    postcode lookup — see `list_curated()` for the full set.
 
     Examples:
         results = await search_locations("sydney")
@@ -342,10 +342,18 @@ async def latest(
             f"(resolved to {resolved.name}). "
             f"Try describe_location({location!r}) to verify coordinates. ({e})"
         ) from e
+    # source_url via urlencode so it byte-matches the URL client.forecast()
+    # actually hit (audit-flagged round-trip fidelity; symmetric with the
+    # air_quality + compare_locations fix from v0.4.1).
     source_url = (
-        f"https://api.open-meteo.com/v1/forecast?latitude={resolved.latitude}"
-        f"&longitude={resolved.longitude}&timezone={resolved.timezone}"
-        f"&current={','.join(_DEFAULT_CURRENT_VARS)}&forecast_days=1"
+        "https://api.open-meteo.com/v1/forecast?"
+        + urlencode({
+            "latitude": resolved.latitude,
+            "longitude": resolved.longitude,
+            "timezone": resolved.timezone,
+            "current": ",".join(_DEFAULT_CURRENT_VARS),
+            "forecast_days": 1,
+        })
     )
     return build_response(
         location=resolved,
@@ -508,11 +516,16 @@ async def get_weather(
             f"between {start_validated} and {end_validated}. ({e})"
         ) from e
 
-    source_url = (
-        f"{base}?latitude={resolved.latitude}&longitude={resolved.longitude}"
-        f"&timezone={resolved.timezone}&start_date={start_validated}&end_date={end_validated}"
-        f"&{granularity}={','.join(vars_param)}"
-    )
+    # source_url via urlencode so it byte-matches the URL the client actually
+    # hit (round-trip fidelity; symmetric with v0.4.1's air_quality fix).
+    source_url = f"{base}?" + urlencode({
+        "latitude": resolved.latitude,
+        "longitude": resolved.longitude,
+        "timezone": resolved.timezone,
+        "start_date": start_validated,
+        "end_date": end_validated,
+        granularity: ",".join(vars_param),
+    })
     return build_response(
         location=resolved,
         payload=payload,

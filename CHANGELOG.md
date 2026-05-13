@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.2 (2026-05-13)
+
+**Iter-2 audit cleanups.** Agent C PASS, Agent A 0 bugs, Agent B and
+Agent A's bonus pass found two consistency items.
+
+- **Fix: `latest()` + `get_weather()` source_url round-trip.** v0.4.1
+  fixed the urlencode-vs-raw-commas asymmetry for `air_quality` and
+  `compare_locations` but left `latest()` and `get_weather()` building
+  source_url with raw commas (`,`) where the client uses `urlencode()`
+  (percent-encoded `%2C`). Symmetric fix now applied — all four
+  weather-call paths advertise byte-identical URLs to what was served.
+- **Doc fix: `search_locations` docstring.** Said "Fuzzy-search the
+  21 curated Australian locations" — stale since v0.4.0 doubled to
+  45. Now matches the YAML and `list_curated()`'s docstring.
+
+No behavioural change for callers. 102 unit + 20 live = 122 tests
+still green.
+
 ## 0.4.1 (2026-05-13)
 
 **Iter-1 audit fixes** on v0.4.0. Agent A (adversarial) found 0 bugs,
