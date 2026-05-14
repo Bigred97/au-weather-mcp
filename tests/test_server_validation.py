@@ -228,6 +228,37 @@ async def test_compare_locations_rejects_too_many():
         await server.compare_locations(["sydney"] * 11)
 
 
+# ---------- v0.4.6: every weak ValueError message must carry a "Try X" /
+# "Valid options:" hint (quality dimension #5 — Deterministic Error Handling).
+# These regression tests guard against future drift that re-introduces
+# error messages that only describe the rejection.
+
+
+async def test_granularity_error_lists_valid_options_and_suggests_default():
+    """REGRESSION (v0.4.6): granularity rejection used to say only
+    'must be daily or hourly'. Quality dim #5 requires a 'Try X' hint."""
+    with pytest.raises(ValueError) as excinfo:
+        await server.get_weather("sydney", granularity="weekly")  # type: ignore[arg-type]
+    msg = str(excinfo.value)
+    # Must include valid options
+    assert "'daily'" in msg and "'hourly'" in msg
+    # Must include a positive "Try X" pointer, not only a rejection
+    assert "Try " in msg or "Valid options" in msg
+
+
+async def test_compare_locations_non_list_error_suggests_example_input():
+    """REGRESSION (v0.4.6): the non-list rejection used to say only
+    'locations must be a list of strings, got str.' — a customer who
+    typed compare_locations('sydney') has no idea what to do. Now it
+    must show a concrete example."""
+    with pytest.raises(ValueError) as excinfo:
+        await server.compare_locations("sydney")  # type: ignore[arg-type]
+    msg = str(excinfo.value)
+    assert "Try compare_locations" in msg
+    # Example uses a 2-element list (the minimum)
+    assert "'sydney'" in msg and "'melbourne'" in msg
+
+
 async def test_compare_locations_isolates_unexpected_exception(monkeypatch):
     """REGRESSION (v0.4.0 iter-1 audit): if one row's fetch raises an
     *unexpected* exception (e.g. pydantic ValidationError from a sanity

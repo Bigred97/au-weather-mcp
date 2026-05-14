@@ -111,7 +111,12 @@ class WeatherObservation(BaseModel):
         if not AU_TEMP_MIN_C <= v <= AU_TEMP_MAX_C:
             raise ValueError(
                 f"temperature {v} °C outside plausible Australian range "
-                f"[{AU_TEMP_MIN_C}, {AU_TEMP_MAX_C}]"
+                f"[{AU_TEMP_MIN_C}, {AU_TEMP_MAX_C}] °C. This signals an "
+                "upstream Open-Meteo / BOM data anomaly, not a caller error. "
+                "Try the same query again in 15 minutes (cache TTL); if "
+                "reproducible, file an issue at "
+                "https://github.com/Bigred97/au-weather-mcp/issues with the "
+                "location and timestamp."
             )
         return v
 
@@ -121,7 +126,13 @@ class WeatherObservation(BaseModel):
         if v is None:
             return v
         if not 0 <= v <= 100:
-            raise ValueError(f"percentage {v} outside 0-100")
+            raise ValueError(
+                f"percentage {v} outside the valid 0-100 range. This signals "
+                "an upstream Open-Meteo / BOM data anomaly, not a caller "
+                "error. Try the same query again in 15 minutes (cache TTL); "
+                "if reproducible, file an issue at "
+                "https://github.com/Bigred97/au-weather-mcp/issues."
+            )
         return v
 
     @field_validator("pressure_msl_hpa")
@@ -132,7 +143,11 @@ class WeatherObservation(BaseModel):
         if not AU_PRESSURE_MIN_HPA <= v <= AU_PRESSURE_MAX_HPA:
             raise ValueError(
                 f"pressure {v} hPa outside plausible range "
-                f"[{AU_PRESSURE_MIN_HPA}, {AU_PRESSURE_MAX_HPA}]"
+                f"[{AU_PRESSURE_MIN_HPA}, {AU_PRESSURE_MAX_HPA}] hPa. This "
+                "signals an upstream Open-Meteo / BOM data anomaly, not a "
+                "caller error. Try the same query again in 15 minutes (cache "
+                "TTL); if reproducible, file an issue at "
+                "https://github.com/Bigred97/au-weather-mcp/issues."
             )
         return v
 
@@ -142,7 +157,13 @@ class WeatherObservation(BaseModel):
         if v is None:
             return v
         if not 0 <= v <= 360:
-            raise ValueError(f"wind_direction {v}° outside 0-360")
+            raise ValueError(
+                f"wind_direction {v}° outside the valid 0-360° range. This "
+                "signals an upstream Open-Meteo / BOM data anomaly, not a "
+                "caller error. Try the same query again in 15 minutes (cache "
+                "TTL); if reproducible, file an issue at "
+                "https://github.com/Bigred97/au-weather-mcp/issues."
+            )
         return v
 
 
@@ -169,7 +190,12 @@ class DailyAggregate(BaseModel):
             return v
         if not AU_TEMP_MIN_C <= v <= AU_TEMP_MAX_C:
             raise ValueError(
-                f"daily temperature {v} °C outside plausible AU range"
+                f"daily temperature {v} °C outside plausible Australian "
+                f"range [{AU_TEMP_MIN_C}, {AU_TEMP_MAX_C}] °C. This signals "
+                "an upstream Open-Meteo / BOM data anomaly, not a caller "
+                "error. Try the same query again in 15 minutes (cache TTL); "
+                "if reproducible, file an issue at "
+                "https://github.com/Bigred97/au-weather-mcp/issues."
             )
         return v
 

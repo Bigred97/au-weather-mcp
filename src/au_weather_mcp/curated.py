@@ -62,7 +62,11 @@ def _load() -> dict[str, CuratedLocation]:
     for loc_id, fields in locs.items():
         if not _LOCATION_ID_PATTERN.match(loc_id):
             raise ValueError(
-                f"Location id {loc_id!r} must match {_LOCATION_ID_PATTERN.pattern}"
+                f"Location id {loc_id!r} must match the snake_case pattern "
+                f"{_LOCATION_ID_PATTERN.pattern} (lowercase letter followed "
+                "by letters/digits/underscores). Try renaming to e.g. "
+                "'gold_coast', 'alice_springs', 'mount_gambier' in "
+                "data/curated/locations.yaml."
             )
         out[loc_id] = CuratedLocation(
             id=loc_id,

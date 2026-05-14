@@ -173,7 +173,10 @@ def _try_lat_lng(s: str, original: str) -> ResolvedLocation | None:
         raise ValueError(
             f"coordinates ({lat}, {lng}) are outside the Australia bounding box "
             f"({AU_LAT_MIN}..{AU_LAT_MAX} lat, {AU_LNG_MIN}..{AU_LNG_MAX} lng). "
-            "au-weather-mcp only serves Australian locations."
+            "au-weather-mcp only serves Australian locations. Try a valid AU "
+            "coordinate like '-33.87,151.21' (Sydney) or '-37.81,144.96' "
+            "(Melbourne), a curated ID via list_curated(), or a place name "
+            "like 'Bondi Beach'."
         )
     return ResolvedLocation(
         name=f"({lat:.4f}, {lng:.4f})",
@@ -296,7 +299,10 @@ async def _try_postcode(client, s: str, original: str) -> ResolvedLocation | Non
             f"outside the Australia bounding box ({AU_LAT_MIN}..{AU_LAT_MAX} lat, "
             f"{AU_LNG_MIN}..{AU_LNG_MAX} lng). au-weather-mcp covers the AU "
             "mainland and Tasmania; external territories (Norfolk Island, "
-            "Christmas Island, Cocos Islands) are not in scope."
+            "Christmas Island, Cocos Islands) are not in scope. Try a "
+            "mainland 4-digit AU postcode (e.g. '2000' for Sydney CBD, "
+            "'3000' for Melbourne, '4000' for Brisbane), or a curated ID — "
+            "list_curated() returns the 45 supported locations."
         )
     name = _parse_suburb_from_nominatim(entry)
     state = entry.get("address", {}).get("state") or _parse_state_from_display_name(
@@ -337,7 +343,11 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
     """
     if not isinstance(location_input, str):
         raise ValueError(
-            f"location must be a string, got {type(location_input).__name__}."
+            f"location must be a string, got "
+            f"{type(location_input).__name__}. Try a curated ID like "
+            "'sydney', a state code like 'NSW', a 4-digit AU postcode like "
+            "'2000', a place name like 'Bondi Beach', or coordinates like "
+            "'-33.87,151.21'. Use list_curated() to enumerate supported IDs."
         )
     s = location_input.strip()
     if not s:

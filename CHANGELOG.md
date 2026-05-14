@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.6 (2026-05-15)
+
+**Error-message sweep — rejection messages now suggest the correction.**
+Quality dimension #5 in CLAUDE.md (Deterministic Error Handling): every
+`ValueError` must carry a "Try X" / "Valid options:" / "Did you mean X?"
+hint, not just describe the rejection. Audit found 11 raise sites whose
+messages only described what went wrong without telling the caller how
+to fix it; this release rewrites all 11.
+
+- **`models.py` sanity validators (5 sites)** — `temperature_c`,
+  `relative_humidity_pct`, `pressure_msl_hpa`, `wind_direction_deg`,
+  `DailyAggregate` temperatures. These trip on upstream Open-Meteo / BOM
+  data anomalies (not caller errors), so the new messages route the
+  user to retry-after-cache-TTL and to the GitHub issue tracker.
+- **`server.py` (4 sites)** — `search_locations` limit validation now
+  suggests `limit=10` (the default); `get_weather` granularity rejection
+  lists both valid options and suggests `'daily'`; `get_weather` /
+  `air_quality` fetch-error paths now point at `describe_location()` to
+  verify resolved coordinates; `compare_locations` non-list rejection
+  now shows a concrete `['sydney', 'melbourne']` example.
+- **`resolution.py` (2 sites)** — `location` non-string rejection now
+  lists all five accepted input shapes with examples; lat/lng bbox
+  rejection suggests valid AU coordinates and curated alternatives.
+  Postcode-outside-bbox rejection now points at mainland postcodes
+  ('2000', '3000', '4000') and `list_curated()`.
+- **`curated.py` (1 site, developer-facing)** — YAML loader's
+  snake_case rejection now shows example IDs (`'gold_coast'`,
+  `'alice_springs'`, `'mount_gambier'`).
+
+No behavioural change — same conditions raise the same exception type
+(`ValueError`); only the message strings improved. Tool surface, the
+5-tool contract, response envelope, and cache layer are all unchanged.
+
+- **+2 regression tests** in `test_server_validation.py`:
+  1. `granularity` error must list valid options AND carry a "Try X" pointer
+  2. `compare_locations` non-list error must show a concrete example call
+- 108 unit tests now (was 106 in 0.4.5). 20 live tests unchanged.
+  10×10 zero-flake confirmed before tagging.
+
 ## 0.4.5 (2026-05-15)
 
 Graceful degradation — quality dimension #4 in CLAUDE.md. Propagated from

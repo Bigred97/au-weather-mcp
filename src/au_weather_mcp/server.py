@@ -184,10 +184,15 @@ async def search_locations(
         )
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise ValueError(
-            f"limit must be a positive integer, got {limit!r} ({type(limit).__name__})."
+            f"limit must be a positive integer, got {limit!r} "
+            f"({type(limit).__name__}). Try limit=10 (the default), or any "
+            "integer between 1 and 100."
         )
     if limit < 1:
-        raise ValueError(f"limit must be >= 1, got {limit}.")
+        raise ValueError(
+            f"limit must be >= 1, got {limit}. Try limit=10 (the default), "
+            "or any integer between 1 and 100."
+        )
     matches = curated_mod.search(query, limit=limit)
     return [
         LocationSummary(
@@ -481,7 +486,10 @@ async def get_weather(
         )
     if granularity not in ("daily", "hourly"):
         raise ValueError(
-            f"granularity must be 'daily' or 'hourly', got {granularity!r}."
+            f"granularity must be 'daily' or 'hourly', got {granularity!r}. "
+            "Valid options: 'daily' (one row per day with max/min/sum "
+            "aggregates), 'hourly' (~24x more rows; one point observation "
+            "per hour). Try granularity='daily' for typical use."
         )
     client = await _get_client()
     resolved = await _resolve(client, location)
@@ -530,8 +538,12 @@ async def get_weather(
             base = "https://api.open-meteo.com/v1/forecast"
     except OpenMeteoError as e:
         raise ValueError(
-            f"Could not fetch weather for {location!r} (resolved to {resolved.name}) "
-            f"between {start_validated} and {end_validated}. ({e})"
+            f"Could not fetch weather for {location!r} (resolved to "
+            f"{resolved.name}) between {start_validated} and {end_validated}. "
+            f"({e}) Try describe_location({location!r}) to verify the "
+            "resolved coordinates, or narrow the date range — Open-Meteo's "
+            "historical archive covers 1940-01-01 onwards and forecast "
+            "covers today through today + 16 days."
         ) from e
 
     # source_url via urlencode so it byte-matches the URL the client actually
@@ -633,7 +645,10 @@ async def air_quality(
     except OpenMeteoError as e:
         raise ValueError(
             f"Could not fetch air quality for {location!r} (resolved to "
-            f"{resolved.name}). ({e})"
+            f"{resolved.name}). ({e}) Try describe_location({location!r}) "
+            "to verify the resolved coordinates, or retry in 15 minutes — "
+            "Open-Meteo's air-quality API can intermittently lag the main "
+            "forecast service."
         ) from e
     # Build source_url via the same urlencode the client uses so the URL
     # advertised in the response is byte-identical to the URL Open-Meteo
@@ -711,7 +726,10 @@ async def compare_locations(
     # Validation: list of 2-10 non-empty strings
     if not isinstance(locations, list):
         raise ValueError(
-            f"locations must be a list of strings, got {type(locations).__name__}."
+            f"locations must be a list of strings, got "
+            f"{type(locations).__name__}. Try compare_locations(["
+            "'sydney', 'melbourne']) — each entry accepts a curated ID, "
+            "place name, state code, AU postcode, or 'lat,lng' coordinates."
         )
     if len(locations) < 2:
         raise ValueError(
