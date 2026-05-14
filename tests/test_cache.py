@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import timedelta
 from pathlib import Path
 

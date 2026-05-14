@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from au_weather_mcp import curated as curated_mod
 from au_weather_mcp.resolution import (
     _normalize_to_curated_key,
     _try_lat_lng,

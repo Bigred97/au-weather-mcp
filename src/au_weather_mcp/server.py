@@ -504,7 +504,7 @@ async def get_weather(
     elif end_validated and not start_validated:
         start_validated = end_validated
 
-    start_d = _date.fromisoformat(start_validated)
+    _ = _date.fromisoformat(start_validated)  # validate format; result unused (range uses end_d only)
     end_d = _date.fromisoformat(end_validated)
     archive_cutoff = today - timedelta(days=5)
     use_archive = end_d <= archive_cutoff

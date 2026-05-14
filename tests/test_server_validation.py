@@ -299,7 +299,7 @@ async def test_air_quality_source_url_round_trips_via_urlencode():
     response must be byte-identical to the URL the client actually hits.
     Previously the server built the URL with raw commas in `current=...`
     while the client built it via urlencode (percent-encoded commas)."""
-    from au_weather_mcp.client import OpenMeteoClient, AIR_QUALITY_BASE
+    from au_weather_mcp.client import AIR_QUALITY_BASE
 
     captured = {}
 
@@ -316,7 +316,6 @@ async def test_air_quality_source_url_round_trips_via_urlencode():
         return {"current": {"time": "2026-05-13T11:00", "pm2_5": 5.0}}
 
     from au_weather_mcp.client import OpenMeteoClient as _OMC
-    import au_weather_mcp.server as _srv
     # Monkey-patch via the server's client instance fetch
     import unittest.mock as _mock
     with _mock.patch.object(_OMC, "air_quality", fake_air_quality):
