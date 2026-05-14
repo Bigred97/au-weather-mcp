@@ -24,7 +24,12 @@ from pydantic import Field
 
 from . import curated as curated_mod
 from . import __version__
-from .client import OpenMeteoClient, OpenMeteoError
+from .client import (
+    OpenMeteoClient,
+    OpenMeteoError,
+    get_stale_signal,
+    reset_stale_signal,
+)
 from .models import (
     DEFAULT_ATTRIBUTION,
     AirQualityResponse,
@@ -325,6 +330,9 @@ async def latest(
         WeatherResponse with `current` populated, plus location metadata,
         resolution source, source_url, CC-BY attribution, and server_version.
     """
+    # Reset the graceful-degradation flag at the start of each tool call so
+    # we only report staleness introduced by THIS call's fetches.
+    reset_stale_signal()
     client = await _get_client()
     resolved = await _resolve(client, location)
     try:
@@ -355,12 +363,19 @@ async def latest(
             "forecast_days": 1,
         })
     )
-    return build_response(
+    resp = build_response(
         location=resolved,
         payload=payload,
         source_url=source_url,
         user_query={"location": location},
     )
+    # If any fetch in the chain (resolve or forecast) served a stale-cache
+    # fallback because Open-Meteo was unreachable, propagate to the response.
+    stale, reason = get_stale_signal()
+    if stale:
+        resp.stale = True
+        resp.stale_reason = reason
+    return resp
 
 
 @mcp.tool
@@ -454,6 +469,9 @@ async def get_weather(
         WeatherResponse with either `daily` or `hourly` populated depending
         on `granularity`. Period bounds populated from actual returned data.
     """
+    # Reset the graceful-degradation flag at the start of each tool call so
+    # we only report staleness introduced by THIS call's fetches.
+    reset_stale_signal()
     start_validated = _validate_date(start_date, "start_date")
     end_validated = _validate_date(end_date, "end_date")
     if start_validated and end_validated and start_validated > end_validated:
@@ -526,7 +544,7 @@ async def get_weather(
         "end_date": end_validated,
         granularity: ",".join(vars_param),
     })
-    return build_response(
+    resp = build_response(
         location=resolved,
         payload=payload,
         source_url=source_url,
@@ -539,6 +557,11 @@ async def get_weather(
         start_period=start_validated,
         end_period=end_validated,
     )
+    stale, reason = get_stale_signal()
+    if stale:
+        resp.stale = True
+        resp.stale_reason = reason
+    return resp
 
 
 @mcp.tool
@@ -597,6 +620,7 @@ async def air_quality(
         AirQualityResponse with `current` populated (pollutants + AQI scales),
         plus location metadata, source_url, attribution, and server_version.
     """
+    reset_stale_signal()
     client = await _get_client()
     resolved = await _resolve(client, location)
     try:
@@ -623,11 +647,16 @@ async def air_quality(
             "current": ",".join(_DEFAULT_AIR_QUALITY_VARS),
         })
     )
-    return build_air_quality_response(
+    resp = build_air_quality_response(
         location=resolved,
         payload=payload,
         source_url=source_url,
     )
+    stale, reason = get_stale_signal()
+    if stale:
+        resp.stale = True
+        resp.stale_reason = reason
+    return resp
 
 
 @mcp.tool

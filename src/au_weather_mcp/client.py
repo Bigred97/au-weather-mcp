@@ -19,6 +19,8 @@ We make two endpoint families:
 from __future__ import annotations
 
 import json
+import time
+from contextvars import ContextVar
 from typing import Any
 from urllib.parse import urlencode
 
@@ -36,6 +38,38 @@ AIR_QUALITY_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality"
 # identifying User-Agent and a max of 1 req/sec; cached aggressively.
 NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
+
+
+# ─── stale signal (graceful-degradation reporting per CLAUDE.md dim #4) ─
+# When Open-Meteo is unreachable, _fetch falls back to the cached payload
+# regardless of TTL and records the staleness in this ContextVar.
+# Server-side tool wrappers read it after the request chain and set
+# WeatherResponse.stale / .stale_reason. ContextVar (not instance attr) so
+# concurrent MCP tool calls each see their own state.
+_stale_signal: ContextVar[tuple[bool, str | None]] = ContextVar(
+    "au_weather_mcp_stale_signal", default=(False, None)
+)
+
+
+def reset_stale_signal() -> None:
+    """Clear the stale state. Call once at the start of each tool call."""
+    _stale_signal.set((False, None))
+
+
+def get_stale_signal() -> tuple[bool, str | None]:
+    """Return (stale, reason) for the most recent fetch chain in this context."""
+    return _stale_signal.get()
+
+
+def _mark_stale(reason: str) -> None:
+    """Record that a stale-cache fallback was served this context.
+
+    If multiple fetches in one chain are stale, we keep the FIRST reason
+    (it's usually the most informative — the originating upstream failure).
+    """
+    cur_stale, _ = _stale_signal.get()
+    if not cur_stale:
+        _stale_signal.set((True, reason))
 
 
 class OpenMeteoError(Exception):
@@ -87,18 +121,45 @@ class OpenMeteoClient:
         try:
             resp = await self._http.get(url)
             resp.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            # Open-Meteo returns 4xx with a JSON body describing the error;
-            # surface that to the MCP tool so the user gets an actionable hint.
-            try:
-                body = e.response.json()
-                reason = body.get("reason", body)
-            except Exception:
-                reason = e.response.text[:200]
-            raise OpenMeteoError(
-                f"Open-Meteo API returned {e.response.status_code} for {url}: {reason}"
-            ) from e
-        except httpx.RequestError as e:
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            # Graceful degradation: when upstream is unreachable, fall back
+            # to the most-recent cached payload (regardless of TTL) rather
+            # than raising and breaking the agent's chain of reasoning.
+            # The staleness is surfaced via the _stale_signal ContextVar
+            # and ends up in WeatherResponse.stale / stale_reason.
+            # 4xx is treated the same way — Open-Meteo occasionally serves
+            # transient 5xx-shaped 4xx errors, and a stale payload is more
+            # useful than a hard failure for the agent.
+            fallback = await self.cache.get_stale(url)
+            if fallback is not None:
+                payload_bytes, cached_at = fallback
+                try:
+                    cached_payload = json.loads(payload_bytes)
+                except json.JSONDecodeError:
+                    cached_payload = None
+                if cached_payload is not None:
+                    age_min = max(0, int((time.time() - cached_at) / 60))
+                    if isinstance(e, httpx.HTTPStatusError):
+                        upstream = f"Open-Meteo returned {e.response.status_code}"
+                    else:
+                        upstream = f"Open-Meteo unreachable ({type(e).__name__})"
+                    _mark_stale(
+                        f"{upstream} for {url}; serving cached payload from "
+                        f"~{age_min} minute(s) ago"
+                    )
+                    return cached_payload
+            # Genuinely no cache to fall back to — preserve original behaviour
+            if isinstance(e, httpx.HTTPStatusError):
+                # Open-Meteo returns 4xx with a JSON body describing the error;
+                # surface that to the MCP tool so the user gets an actionable hint.
+                try:
+                    body = e.response.json()
+                    reason = body.get("reason", body)
+                except Exception:
+                    reason = e.response.text[:200]
+                raise OpenMeteoError(
+                    f"Open-Meteo API returned {e.response.status_code} for {url}: {reason}"
+                ) from e
             # Some httpx error classes have an empty str(); surface the type
             # so a concurrency / pool / SSL failure isn't a mystery to debug.
             detail = str(e) or type(e).__name__

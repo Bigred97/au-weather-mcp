@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.4.5 (2026-05-15)
+
+Graceful degradation — quality dimension #4 in CLAUDE.md. Propagated from
+the abs-mcp 0.2.13 reference implementation.
+
+When Open-Meteo is unreachable (5xx, timeout, DNS failure, connection
+refused), the client now falls back to the most-recent cached payload
+regardless of TTL and surfaces the staleness in the response. Agents see
+`WeatherResponse.stale=True` with a `stale_reason` like *"Open-Meteo
+unreachable (ConnectError) for https://...; serving cached payload from
+~17 minute(s) ago"* and can continue reasoning, rather than the tool
+raising and breaking the chat.
+
+Genuine no-cache-to-fall-back-to case still raises `OpenMeteoError` —
+only degrade gracefully when there's something to degrade to.
+
+- **New: `Cache.get_stale(key) -> (payload, cached_at)`** — TTL-bypassing
+  read, the building block for the fallback path.
+- **New: `_stale_signal` ContextVar in `client.py`** — `reset_stale_signal()`
+  + `get_stale_signal()` are the public API. The server resets at the
+  start of each tool call and reads at the end to propagate `stale=True`
+  into the response. Tool methods wired: `latest`, `get_weather`,
+  `air_quality`. `WeatherResponse.stale` / `stale_reason` already
+  existed on the model.
+- **+4 regression tests** in `test_client.py`:
+  1. 503 + stale cache → fallback + stale flag set
+  2. ConnectError + stale cache → same
+  3. 503 + empty cache → raises `OpenMeteoError` (unchanged behaviour)
+  4. `Cache.get_stale()` round-trip + TTL bypass verification
+- 106 unit tests now (was 102 in 0.4.4). 20 live tests unchanged.
+
 ## 0.4.4 (2026-05-13)
 
 **First PyPI release via Trusted Publishing (OIDC).** No code changes vs
