@@ -10,7 +10,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Harry Vass" }]
-keywords = ["mcp", "weather", "australia", "bom", "bureau-of-meteorology", "open-meteo", "claude", "fastmcp", "forecast", "climate"]
+keywords = [
+    "mcp", "model-context-protocol", "claude", "fastmcp",
+    "weather", "bom", "bureau-of-meteorology", "open-meteo", "forecast", "climate",
+    "australia", "australian", "public-data", "government-data",
+    "air-quality",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -42,7 +47,11 @@ au-weather-mcp = "au_weather_mcp.server:main"
 
 [project.urls]
 Homepage = "https://github.com/Bigred97/au-weather-mcp"
+Documentation = "https://github.com/Bigred97/au-weather-mcp#readme"
+Repository = "https://github.com/Bigred97/au-weather-mcp"
 Issues = "https://github.com/Bigred97/au-weather-mcp/issues"
+Changelog = "https://github.com/Bigred97/au-weather-mcp/blob/main/CHANGELOG.md"
+PyPI = "https://pypi.org/project/au-weather-mcp/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/au_weather_mcp"]

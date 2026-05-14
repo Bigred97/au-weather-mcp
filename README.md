@@ -1,9 +1,10 @@
 # au-weather-mcp
 
-[![tests](https://github.com/Bigred97/au-weather-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/Bigred97/au-weather-mcp/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License](https://img.shields.io/pypi/l/au-weather-mcp.svg)](https://github.com/Bigred97/au-weather-mcp/blob/main/LICENSE)
+[![Tests](https://github.com/Bigred97/au-weather-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/Bigred97/au-weather-mcp/actions/workflows/test.yml)
+[![CodeQL](https://github.com/Bigred97/au-weather-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bigred97/au-weather-mcp/actions/workflows/codeql.yml)
 [![Glama MCP server quality](https://glama.ai/mcp/servers/Bigred97/au-weather-mcp/badges/score.svg)](https://glama.ai/mcp/servers/Bigred97/au-weather-mcp)
 
 **Ask Claude about Australian weather and air quality and get real, current numbers** — not "I don't have access to that data." This MCP server gives Claude (and other MCP clients like Cursor) live access to Australian weather + air-quality data via [Open-Meteo](https://open-meteo.com), which aggregates Bureau of Meteorology observations under licence. 45 curated locations (every state capital + every regional centre over ~25k), postcode and place-name lookup, current observations, 16-day forecasts, 80+ years of historical data, and multi-location comparison.
@@ -242,13 +243,20 @@ uv run pytest -m live
 
 The SQLite cache lives at `~/.au-weather-mcp/cache.db`. Current observations refresh every 15 minutes (matching Open-Meteo's update cadence), forecasts every 1 hour, historical never (a year-old day in the archive doesn't change). Delete the file to force a refresh.
 
-## Sister servers
+## Sister MCPs (Australian Public Data portfolio)
 
-The four packages run side-by-side in any MCP client; Claude disambiguates via the server prefix (`weather:latest` vs `abs:latest` vs `rba:latest` vs `ato:get_data`).
+The portfolio runs side-by-side in any MCP client; Claude disambiguates via the server prefix (`weather:latest` vs `abs:latest` vs `rba:latest` vs `ato:get_data`).
 
-- **[abs-mcp](https://github.com/Bigred97/abs-mcp)** — Australian Bureau of Statistics: labour force, CPI, GDP, wages, housing, population
-- **[rba-mcp](https://github.com/Bigred97/rba-mcp)** — Reserve Bank of Australia: cash rate, FX, lending rates
-- **[ato-mcp](https://github.com/Bigred97/ato-mcp)** — Australian Taxation Office + ACNC: personal tax by postcode, company tax, charity register
+- [abs-mcp](https://pypi.org/project/abs-mcp/) — Australian Bureau of Statistics (CPI, unemployment, ERP, building approvals)
+- [rba-mcp](https://pypi.org/project/rba-mcp/) — Reserve Bank of Australia (cash rate, lending stats, exchange rates)
+- [ato-mcp](https://pypi.org/project/ato-mcp/) — Australian Taxation Office (tax stats, ACNC charities)
+- [apra-mcp](https://pypi.org/project/apra-mcp/) — Australian Prudential Regulation Authority (banking, insurance, super)
+- [aihw-mcp](https://pypi.org/project/aihw-mcp/) — Australian Institute of Health and Welfare
+- [asic-mcp](https://pypi.org/project/asic-mcp/) — Australian Securities and Investments Commission (company registers)
+- [aemo-mcp](https://pypi.org/project/aemo-mcp/) — Australian Energy Market Operator (NEM dispatch, spot prices, generation)
+- **au-weather-mcp** — this one. Open-Meteo (Bureau of Meteorology aggregator).
+- [wgea-mcp](https://pypi.org/project/wgea-mcp/) — Workplace Gender Equality Agency
+- [aus-identity](https://pypi.org/project/aus-identity/) — Postcode / state / ABN normalisation helper used by all sisters
 
 ## Data attribution
 
