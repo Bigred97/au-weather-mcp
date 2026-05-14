@@ -1,25 +1,40 @@
 # au-weather-mcp
 
-> MCP server giving LLM agents live access to Australian weather data — current observations, 16-day forecasts, and 80+ years of historical archive — for 21 curated AU locations (8 capitals + 13 regional centres). Backed by Open-Meteo, which aggregates Bureau of Meteorology data under licence.
+> MCP server exposing Australian weather and air quality through 7 plain-English tools — current observations, 16-day forecasts, 80+ years of historical archive, air quality (PM2.5, AQI), and side-by-side multi-location comparison. Backed by Open-Meteo (BOM aggregator).
 
-au-weather-mcp wraps Open-Meteo (https://open-meteo.com) and exposes 5 MCP tools to any client that speaks the Model Context Protocol (Claude Desktop, Cursor, Cline, etc.). Plain-English location IDs (`sydney`, `cairns`) map to canonical lat/lng coordinates anchored to the nearest BOM observation point. Every response carries provenance fields (source URL, CC-BY 4.0 attribution to Open-Meteo + BOM, timestamps, server version) and Pydantic sanity validators reject upstream values outside the plausible Australian range.
+au-weather-mcp is the weather member of the Australian Public Data MCP portfolio. It wraps Open-Meteo (https://open-meteo.com), which aggregates Bureau of Meteorology observations under licence — BOM 403s non-browser User-Agents and has no documented commercial-use path below their ~$5k/yr Registered User Service, so Open-Meteo is the practical aggregator.
 
-The five tools follow the same pattern as the sister servers:
+45 curated locations cover every AU state/territory capital (8) plus every regional centre over ~25k (37). Plain-English location IDs (`sydney`, `gold_coast`), case-insensitive place names, state codes, AU postcodes, and raw coordinates all resolve to canonical lat/lng — anchored to the nearest BOM observation point for the curated set. Every response carries CC-BY 4.0 attribution (Open-Meteo + BOM, plus OpenStreetMap for postcode lookups). Pydantic sanity validators reject upstream values outside plausible AU range (-30°C to +55°C, humidity 0-100%, pressure 850-1080 hPa).
 
-- `search_locations(query, limit)` — fuzzy-search the 21 curated locations
-- `describe_location(location)` — lat/lng, timezone, elevation, nearest BOM station
-- `latest(location)` — current weather observation (15-min cache)
-- `get_weather(location, start_date, end_date, granularity)` — time-series; auto-routes to historical archive (1940+) or forecast (today + 16 days)
-- `list_curated()` — all 21 supported location IDs
+This MCP uses `WeatherResponse` / `AirQualityResponse` / `ComparisonResponse` — the documented exception to the portfolio's uniform `DataResponse` envelope, justified because weather isn't time-series-table-shaped.
 
 ## Documentation
 
-- [README](https://github.com/Bigred97/au-weather-mcp/blob/main/README.md): install + worked examples + trust contract
-- [CHANGELOG](https://github.com/Bigred97/au-weather-mcp/blob/main/CHANGELOG.md): release history
-- [curated locations YAML](https://github.com/Bigred97/au-weather-mcp/blob/main/src/au_weather_mcp/data/curated/locations.yaml): the 21 locations + their coordinates
+- [README](https://github.com/Bigred97/au-weather-mcp/blob/main/README.md): Full setup + 7-tool usage + input resolution rules
+- [CHANGELOG](https://github.com/Bigred97/au-weather-mcp/blob/main/CHANGELOG.md): Release history
+- [PyPI](https://pypi.org/project/au-weather-mcp/): `uvx --upgrade au-weather-mcp`
 
-## Sister servers
+## Tools
 
-- [abs-mcp](https://github.com/Bigred97/abs-mcp) — Australian Bureau of Statistics (labour, CPI, GDP, wages, housing, population)
-- [rba-mcp](https://github.com/Bigred97/rba-mcp) — Reserve Bank of Australia (cash rate, FX, lending rates)
-- [ato-mcp](https://github.com/Bigred97/ato-mcp) — Australian Taxation Office + ACNC charity register
+- search_locations(query, limit=10): Fuzzy-search the 45 curated AU locations by name, state, or description
+- describe_location(location): Lat/lng, timezone, elevation, nearest BOM station, Open-Meteo URL
+- latest(location): Current weather observation (15-min cache)
+- get_weather(location, start_date, end_date, granularity): Time-series query. Auto-routes to historical archive (1940+) when `end_date >= today - 5 days`, otherwise forecast (today + 16 days). `granularity="daily"` or `"hourly"`
+- air_quality(location): Current PM2.5, PM10, ozone, NO2, SO2, CO + European & US AQI with plain-English labels
+- compare_locations([locs]): Side-by-side current weather for 2-10 locations in one call; fans out concurrently
+- list_curated(): All 45 supported location IDs
+
+## Example queries
+
+- "What's the weather in Sydney right now?"
+- "Forecast for Melbourne next week"
+- "How was Sydney in January 2020?" (auto-routes to historical archive)
+- "Compare rainfall in Cairns vs Brisbane today"
+- "Air quality in the Blue Mountains" (bushfire smoke check)
+- "Weather at postcode 6160" (Fremantle — resolves via geocoder)
+- "Capital city dashboard for sydney, melbourne, brisbane, perth"
+
+## Optional
+
+- [Sister MCPs](https://github.com/Bigred97?tab=repositories&q=mcp): Other AU public-data MCPs in the portfolio
+- [aus-identity](https://pypi.org/project/aus-identity/): Postcode/state normalisation — the `location` parameter accepts any aus-identity-resolvable input (NSW / postcode 2000 / "New South Wales")

@@ -1,0 +1,275 @@
+# au-weather-mcp — full reference
+
+> MCP server exposing Australian weather and air quality through 7 plain-English tools.
+
+au-weather-mcp wraps Open-Meteo (BOM aggregator) — Open-Meteo aggregates Bureau of Meteorology data under licence and exposes a clean JSON API with no auth gymnastics. 45 curated AU locations + on-the-fly postcode / place-name / coordinate resolution. This document is a self-contained integration reference.
+
+---
+
+## Install
+
+```bash
+uvx --upgrade au-weather-mcp
+```
+
+### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "command": "uvx",
+      "args": ["--upgrade", "au-weather-mcp"]
+    }
+  }
+}
+```
+
+### Cursor
+
+```json
+{
+  "mcpServers": {
+    "weather": {
+      "command": "uvx",
+      "args": ["--upgrade", "au-weather-mcp"]
+    }
+  }
+}
+```
+
+---
+
+## Trust contract
+
+Every `WeatherResponse` (and `AirQualityResponse` / `ComparisonResponse`) carries:
+
+```
+source             "Open-Meteo (aggregates Bureau of Meteorology data under licence)"
+source_url         the exact Open-Meteo URL the data came from (byte-identical to fetched URL via urlencode)
+attribution        CC-BY 4.0 attribution for both Open-Meteo and BOM, plus ODbL for OSM postcode lookups
+retrieved_at       UTC timestamp
+server_version     importlib.metadata.version("au-weather-mcp")
+location_resolution One of 'curated' / 'state_alias' / 'raw_coordinates' / 'geocoded' / 'fuzzy_curated' / 'postcode'
+location_input     The original user input echoed back
+stale              True when serving cached fallback after upstream error
+stale_reason       human-readable when stale=True
+```
+
+Cache TTLs: 15-min `current` (matches Open-Meteo's update cadence), 1h `forecast`, never `historical` (year-old archive day doesn't change). Pydantic sanity validators reject implausible values rather than silently passing bad upstream data.
+
+**Different response model than sisters.** au-weather-mcp uses `WeatherResponse` (with `current`, `hourly`, `daily` blocks) instead of `DataResponse` (with `records`). This is the documented exception to the portfolio's uniform envelope, justified because weather isn't time-series-table-shaped.
+
+---
+
+## Tools
+
+### search_locations(query, limit=10)
+
+Fuzzy-search the 45 curated AU locations.
+
+```python
+await search_locations("sydney")
+# → [{id: 'sydney', name: 'Sydney', state: 'NSW', ...}]
+
+await search_locations("nsw")
+# → Newcastle, Wollongong, Sydney, ... (all NSW)
+
+await search_locations("tropical north")
+# → matched by description
+```
+
+### describe_location(location)
+
+Returns `LocationDetail` with id (or None for non-curated), name, state, lat/lng, timezone, elevation, nearest_bom_station (curated only), open_meteo_url, attribution.
+
+Accepts a wide range of input shapes:
+
+| Input shape | Example | Resolves via |
+|---|---|---|
+| Curated ID | `"sydney"`, `"gold_coast"` | Direct curated lookup (fast) |
+| Place name, any case | `"Sydney"`, `"Margaret River"` | Normalised curated lookup |
+| State code or full name | `"NSW"`, `"Queensland"` | State → capital alias |
+| Raw coordinates | `"-33.87,151.21"` | Direct lat/lng (AU bbox enforced) |
+| AU postcode | `"2026"` (Bondi Beach), `"6160"` (Fremantle) | OpenStreetMap Nominatim |
+| Any AU place name | `"Byron Bay"`, `"Toowoomba"` | Open-Meteo geocoding (AU-filtered) |
+| Typo of curated name | `"Sydny"` | High-confidence fuzzy match |
+
+### latest(location)
+
+Current weather observation. 15-min cache TTL. Warm-cache latency < 100ms.
+
+```python
+resp = await latest("sydney")
+# resp.current.temperature_c, .humidity_pct, .wind_speed_kmh, etc.
+```
+
+### get_weather(location, start_date=None, end_date=None, granularity="daily")
+
+Time-series query. Auto-routes:
+
+- `end_date >= today - 5 days` → Open-Meteo forecast endpoint (today + 16 days)
+- `end_date < today - 5 days` → Open-Meteo historical archive (1940-01-01+)
+
+`granularity="daily"` returns one row per day with max/min/sum aggregates. `granularity="hourly"` returns ~24× more rows with point observations.
+
+Date format strictly `YYYY-MM-DD`; semantic-checked (regex-passing but invalid dates like `2024-13-40` rejected at the boundary).
+
+```python
+# Historical: Sydney summer 2020
+await get_weather("sydney",
+                  start_date="2020-01-01", end_date="2020-01-31",
+                  granularity="daily")
+# → 31 DailyAggregate rows
+
+# 7-day Melbourne forecast, hourly detail
+await get_weather("melbourne",
+                  start_date="2026-05-12", end_date="2026-05-19",
+                  granularity="hourly")
+# → 168 hourly rows
+```
+
+### air_quality(location)
+
+Current air-quality readings from Open-Meteo's air-quality API (Copernicus CAMS).
+
+Returns PM2.5, PM10, ozone, NO2, SO2, CO (µg/m³), plus European AQI + US AQI with plain-English labels (Good / Moderate / Unhealthy for Sensitive / Unhealthy / Very Unhealthy / Hazardous).
+
+Useful during AU bushfire season (Oct-Mar) when smoke can push PM2.5 above safe levels regionally.
+
+```python
+resp = await air_quality("sydney")
+# resp.current.pm2_5_ugm3 == 8.8
+# resp.current.european_aqi == 21
+# resp.current.european_aqi_label == 'Good'
+# resp.current.us_aqi == 39
+# resp.current.us_aqi_label == 'Good'
+```
+
+### compare_locations([locs])
+
+2-10 Australian locations, side-by-side current weather. Fans out concurrently via asyncio.gather. Per-row error isolation — one failed location doesn't poison sibling rows.
+
+```python
+resp = await compare_locations(["sydney", "melbourne", "brisbane", "perth"])
+for row in resp.locations:
+    print(row.location_name, row.current.temperature_c)
+
+# Mixed input shapes work
+await compare_locations(["sydney", "NSW", "2026", "-33.87,151.21"])
+```
+
+### list_curated()
+
+```python
+list_curated()
+# → 45 location IDs sorted
+```
+
+---
+
+## Curated locations (45)
+
+8 capitals + 37 regional centres covering every AU population centre over ~25k. Coordinates anchored to the canonical BOM observation point (e.g. Sydney = Observatory Hill, Melbourne = Olympic Park).
+
+| Region | Locations |
+|---|---|
+| Capitals (8) | sydney, melbourne, brisbane, perth, adelaide, hobart, darwin, canberra |
+| NSW regional (10) | newcastle, wollongong, tamworth, wagga_wagga, albury, orange, bathurst, dubbo, coffs_harbour, port_macquarie |
+| QLD regional (9) | gold_coast, sunshine_coast, cairns, townsville, mackay, toowoomba, rockhampton, bundaberg, hervey_bay |
+| VIC regional (6) | geelong, ballarat, bendigo, mildura, shepparton, warrnambool |
+| WA regional (5) | broome, bunbury, geraldton, albany, kalgoorlie |
+| SA regional (2) | mount_gambier, whyalla |
+| TAS regional (3) | launceston, devonport, burnie |
+| NT regional (2) | alice_springs, katherine |
+
+Anything outside the curated set still works via the place-name geocoder or postcode lookup. Curated entries just get fast-path lookup (no network call) and appear in `search_locations`.
+
+---
+
+## Worked examples
+
+### Latest Sydney weather
+
+```python
+await latest("sydney")
+```
+
+```json
+{
+  "location_id": "sydney",
+  "location_name": "Sydney",
+  "state": "NSW",
+  "latitude": -33.8607,
+  "longitude": 151.205,
+  "timezone": "Australia/Sydney",
+  "period": {"start": "2026-05-12T11:30", "end": "2026-05-12T11:30"},
+  "current": {
+    "time": "2026-05-12T11:30",
+    "temperature_c": 19.7,
+    "apparent_temperature_c": 18.1,
+    "relative_humidity_pct": 67,
+    "precipitation_mm": 0.0,
+    "cloud_cover_pct": 43,
+    "pressure_msl_hpa": 1034.5,
+    "wind_speed_kmh": 18.4,
+    "wind_direction_deg": 149,
+    "wind_gusts_kmh": 43.2,
+    "weather_code": 1,
+    "weather_description": "Mainly clear"
+  },
+  "source": "Open-Meteo (aggregates Bureau of Meteorology data under licence)",
+  "attribution": "Weather data by Open-Meteo.com (https://open-meteo.com), licensed under CC BY 4.0...",
+  "source_url": "https://api.open-meteo.com/v1/forecast?latitude=-33.8607&...",
+  "server_version": "0.4.1",
+  "location_resolution": "curated",
+  "location_input": "sydney"
+}
+```
+
+### Multi-location capital-city dashboard
+
+```python
+resp = await compare_locations(["sydney", "melbourne", "brisbane", "perth"])
+```
+
+→ `resp.locations` is a list of 4 `ComparisonRow` each with `current` populated; per-row `source_url` and `location_resolution`.
+
+### Historical archive
+
+```python
+await get_weather("sydney",
+                  start_date="2020-01-01", end_date="2020-01-31",
+                  granularity="daily")
+```
+
+→ 31 `DailyAggregate` rows with `temperature_max_c`, `temperature_min_c`, `precipitation_sum_mm`, weather descriptions.
+
+---
+
+## Why Open-Meteo and not BOM directly
+
+BOM publishes JSON/XML endpoints but actively 403s non-browser User-Agents and has no documented commercial-use path below their ~$5k/yr Registered User Service. Open-Meteo:
+
+- Aggregates BOM data under their existing licensing arrangements with national meteorological services
+- Free tier explicit and generous; commercial use $30/mo with public terms
+- Returns clean, versioned, schema-stable JSON with units alongside every value
+- Covers historical archive back to 1940
+- No API key, no User-Agent gymnastics
+
+Both Open-Meteo and BOM are credited on every response.
+
+---
+
+## Cross-source pairings
+
+- [aemo-mcp](https://pypi.org/project/aemo-mcp/) for weather × demand / rooftop PV correlation (peak demand on hot days)
+- [abs-mcp](https://pypi.org/project/abs-mcp/) for population × climate analysis
+- [aihw-mcp](https://pypi.org/project/aihw-mcp/) for climate × public-health analysis (heatwave mortality)
+- [aus-identity](https://pypi.org/project/aus-identity/) — the `location` parameter accepts any aus-identity-resolvable input
+
+---
+
+## License
+
+au-weather-mcp server code is MIT-licensed. Weather data via Open-Meteo carries CC-BY 4.0 International (Open-Meteo) plus BOM attribution. Postcode resolution adds OSM Nominatim's ODbL when used.
