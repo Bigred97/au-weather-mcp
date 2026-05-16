@@ -383,7 +383,13 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
         return fuzzy
 
     # 6. geocode via Open-Meteo (AU-filtered, population-sorted)
-    candidates = await client.geocode_au(s, count=5)
+    # Open-Meteo's geocoder doesn't understand underscores ('margaret_river'
+    # returns no results) but does understand spaces ('margaret river').
+    # We accept both shapes as documented, so normalise underscores → spaces
+    # before the network call. Curated lookups upstream are unaffected
+    # because they keep snake_case keys via _normalize_to_curated_key.
+    geocode_query = s.replace("_", " ").strip()
+    candidates = await client.geocode_au(geocode_query, count=5)
     if candidates:
         best = candidates[0]
         return ResolvedLocation(

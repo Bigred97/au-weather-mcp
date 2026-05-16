@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.7] - 2026-05-16
+
+### Fixed
+- Underscore place-name resolution regression: `margaret_river`,
+  `byron_bay` etc. now resolve identically to their spaced
+  equivalents (`Margaret River`, `Byron Bay`). Both forms are
+  accepted as documented.
+
 ## 0.4.6 (2026-05-15)
 
 **Error-message sweep — rejection messages now suggest the correction.**

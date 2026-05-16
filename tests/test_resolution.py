@@ -233,6 +233,59 @@ async def test_resolve_unknown_place_uses_geocoder():
     assert r.timezone == "Australia/Perth"
 
 
+async def test_resolve_underscore_form_normalised_for_geocoder():
+    """Regression: an underscore place-name not in the curated set must
+    normalise to spaces before hitting the Open-Meteo geocoder — otherwise
+    'margaret_river' returns no candidates while 'Margaret River' works.
+    Both shapes are publicly documented as accepted."""
+    geocode_result = [{
+        "name": "Margaret River",
+        "country_code": "AU",
+        "admin1": "Western Australia",
+        "latitude": -33.96,
+        "longitude": 115.08,
+        "timezone": "Australia/Perth",
+        "elevation": 50.0,
+    }]
+    c = _FakeClient(geocode_response=geocode_result)
+    r = await resolve_location(c, "margaret_river")
+    assert r.source == "geocoded"
+    assert r.name == "Margaret River"
+    # The query passed to the geocoder must be the spaced form
+    c._geocode.assert_called_once()
+    call_args = c._geocode.call_args
+    geocoder_query = call_args.args[0] if call_args.args else call_args.kwargs.get("name")
+    assert "_" not in geocoder_query, (
+        f"Expected underscores normalised to spaces before geocoding, "
+        f"got {geocoder_query!r}"
+    )
+    assert geocoder_query.strip().lower() == "margaret river"
+
+
+async def test_resolve_underscore_and_spaced_forms_equivalent():
+    """Regression: 'byron_bay' and 'Byron Bay' must resolve to the same
+    ResolvedLocation. Earlier versions broke this when the underscore form
+    was passed through unchanged to a geocoder that doesn't understand it."""
+    geocode_result = [{
+        "name": "Byron Bay",
+        "country_code": "AU",
+        "admin1": "New South Wales",
+        "latitude": -28.65,
+        "longitude": 153.61,
+        "timezone": "Australia/Sydney",
+        "elevation": 5.0,
+    }]
+    c_under = _FakeClient(geocode_response=geocode_result)
+    r_under = await resolve_location(c_under, "byron_bay")
+    c_space = _FakeClient(geocode_response=geocode_result)
+    r_space = await resolve_location(c_space, "Byron Bay")
+    assert r_under.latitude == r_space.latitude
+    assert r_under.longitude == r_space.longitude
+    assert r_under.name == r_space.name
+    assert r_under.state == r_space.state
+    assert r_under.source == r_space.source == "geocoded"
+
+
 async def test_resolve_unknown_with_no_geocode_results_raises_with_suggestions():
     """If everything fails, the error message must list curated alternatives."""
     c = _FakeClient(geocode_response=[])
