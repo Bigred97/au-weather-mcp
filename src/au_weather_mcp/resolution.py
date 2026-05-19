@@ -175,7 +175,7 @@ def _try_lat_lng(s: str, original: str) -> ResolvedLocation | None:
             f"({AU_LAT_MIN}..{AU_LAT_MAX} lat, {AU_LNG_MIN}..{AU_LNG_MAX} lng). "
             "au-weather-mcp only serves Australian locations. Try a valid AU "
             "coordinate like '-33.87,151.21' (Sydney) or '-37.81,144.96' "
-            "(Melbourne), a curated ID via list_curated(), or a place name "
+            "(Melbourne), a curated location ID, or a place name "
             "like 'Bondi Beach'."
         )
     return ResolvedLocation(
@@ -301,8 +301,8 @@ async def _try_postcode(client, s: str, original: str) -> ResolvedLocation | Non
             "mainland and Tasmania; external territories (Norfolk Island, "
             "Christmas Island, Cocos Islands) are not in scope. Try a "
             "mainland 4-digit AU postcode (e.g. '2000' for Sydney CBD, "
-            "'3000' for Melbourne, '4000' for Brisbane), or a curated ID — "
-            "list_curated() returns the 45 supported locations."
+            "'3000' for Melbourne, '4000' for Brisbane), or one of the "
+            "45 curated locations."
         )
     name = _parse_suburb_from_nominatim(entry)
     state = entry.get("address", {}).get("state") or _parse_state_from_display_name(
@@ -347,7 +347,7 @@ async def resolve_location(client, location_input: str) -> ResolvedLocation:
             f"{type(location_input).__name__}. Try a curated ID like "
             "'sydney', a state code like 'NSW', a 4-digit AU postcode like "
             "'2000', a place name like 'Bondi Beach', or coordinates like "
-            "'-33.87,151.21'. Use list_curated() to enumerate supported IDs."
+            "'-33.87,151.21'. Enumerate the curated set to see supported IDs."
         )
     s = location_input.strip()
     if not s:

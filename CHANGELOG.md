@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.4.8] - 2026-05-19
+
+### Improved — transport-agnostic error hints + AST guard test
+
+Error messages no longer name MCP-tool-specific functions
+(`describe_location(...)`, `list_curated()`). The same `ValueError`
+should read cleanly whether the caller is an MCP client, a REST
+gateway (ausdata-api), or a Python script calling the functions
+directly — naming an MCP tool by-name leaks transport details that
+half the callers can't act on.
+
+Three error-message sites rewritten:
+- `resolution._try_lat_lng` — coord-out-of-AU hint
+- `resolution._try_postcode` — non-mainland-postcode hint
+- `resolution.resolve_location` — non-string input hint
+- `server.latest` — current-weather fetch failure
+- `server.get_weather` — historical-range fetch failure
+- `server.air_quality` — air-quality fetch failure
+
+### Added — `test_no_mcp_tool_refs_in_error_strings`
+
+AST-based guard test (mirrors abs-mcp / rba-mcp's validation
+pattern). Walks every `.py` under `src/au_weather_mcp/`, parses
+each `raise <SomeExc>(...)` call, and asserts the string argument
+doesn't match `describe_location|search_locations|list_curated`
+followed by an open paren. Locks in the no-tool-name-leakage rule
+going forward — any future regression fails CI before merge.
+
+111 unit tests pass (+1 guard test).
+
 ## [0.4.7] - 2026-05-16
 
 ### Fixed

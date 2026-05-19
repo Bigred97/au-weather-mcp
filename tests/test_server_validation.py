@@ -6,6 +6,10 @@ Mirrors abs-mcp / rba-mcp's validation test pattern.
 """
 from __future__ import annotations
 
+import ast
+import pathlib
+import re
+
 import pytest
 
 from au_weather_mcp import server
@@ -322,4 +326,72 @@ async def test_air_quality_source_url_round_trips_via_urlencode():
         resp = await server.air_quality("sydney")
     assert resp.source_url == captured["url"], (
         f"source_url mismatch:\n  response: {resp.source_url}\n  actual: {captured['url']}"
+    )
+
+
+# ----- transport-agnostic error hints (mirrors rba-mcp's guard) -----
+#
+# Error messages must not reference MCP-tool names (e.g. `describe_location()`,
+# `search_locations()`, `list_curated()`). An error from the au_weather_mcp
+# package should read the same whether the caller is an MCP client, a REST
+# gateway, or a Python script calling the functions directly.
+
+_SRC_ROOT = pathlib.Path(__file__).resolve().parent.parent / "src" / "au_weather_mcp"
+
+
+def _extract_user_facing_strings() -> list[tuple[pathlib.Path, int, str]]:
+    """Walk every .py under src/au_weather_mcp/, parse the AST, and yield only
+    the string arguments to `raise <SomeExc>(...)` calls — these are the
+    strings users actually see in error reports.
+    """
+    out: list[tuple[pathlib.Path, int, str]] = []
+    for py in _SRC_ROOT.rglob("*.py"):
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Raise) or node.exc is None:
+                continue
+            call = node.exc if isinstance(node.exc, ast.Call) else None
+            if call is None:
+                continue
+            for arg in call.args:
+                pieces: list[str] = []
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    pieces.append(arg.value)
+                elif isinstance(arg, ast.JoinedStr):
+                    for v in arg.values:
+                        if isinstance(v, ast.Constant) and isinstance(v.value, str):
+                            pieces.append(v.value)
+                elif isinstance(arg, ast.BinOp):
+                    stack: list[ast.AST] = [arg]
+                    while stack:
+                        cur = stack.pop()
+                        if isinstance(cur, ast.Constant) and isinstance(cur.value, str):
+                            pieces.append(cur.value)
+                        elif isinstance(cur, ast.BinOp):
+                            stack.append(cur.left)
+                            stack.append(cur.right)
+                        elif isinstance(cur, ast.JoinedStr):
+                            for v in cur.values:
+                                stack.append(v)
+                if pieces:
+                    out.append((py, node.lineno, "".join(pieces)))
+    return out
+
+
+def test_no_mcp_tool_refs_in_error_strings():
+    """No error message references an MCP tool by name
+    (`describe_location(...)`, `search_locations(...)`, `list_curated(...)`).
+    The hint must suggest what to do (look up valid keys, retry, etc.)
+    without naming a specific transport's API surface.
+    """
+    pat = re.compile(r"\b(describe_location|search_locations|list_curated)\s*\(")
+    offenders: list[str] = []
+    for path, lineno, text in _extract_user_facing_strings():
+        if pat.search(text):
+            offenders.append(f"{path.relative_to(_SRC_ROOT.parent.parent)}:{lineno}: {text!r}")
+    assert not offenders, (
+        "User-facing error messages reference MCP tool names — "
+        "these are transport-specific and shouldn't leak through ValueError. "
+        "Replace with transport-agnostic hints (e.g. 'See the valid-options list "
+        f"for X').\n  {chr(10).join(offenders)}"
     )

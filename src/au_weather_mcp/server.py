@@ -353,7 +353,7 @@ async def latest(
         raise ValueError(
             f"Could not fetch current weather for {location!r} "
             f"(resolved to {resolved.name}). "
-            f"Try describe_location({location!r}) to verify coordinates. ({e})"
+            f"Use the describe endpoint or describe tool to verify the resolved coordinates for {location!r}. ({e})"
         ) from e
     # source_url via urlencode so it byte-matches the URL client.forecast()
     # actually hit (audit-flagged round-trip fidelity; symmetric with the
@@ -540,8 +540,8 @@ async def get_weather(
         raise ValueError(
             f"Could not fetch weather for {location!r} (resolved to "
             f"{resolved.name}) between {start_validated} and {end_validated}. "
-            f"({e}) Try describe_location({location!r}) to verify the "
-            "resolved coordinates, or narrow the date range — Open-Meteo's "
+            f"({e}) Use the describe endpoint or describe tool to verify the "
+            f"resolved coordinates for {location!r}, or narrow the date range — Open-Meteo's "
             "historical archive covers 1940-01-01 onwards and forecast "
             "covers today through today + 16 days."
         ) from e
@@ -645,8 +645,8 @@ async def air_quality(
     except OpenMeteoError as e:
         raise ValueError(
             f"Could not fetch air quality for {location!r} (resolved to "
-            f"{resolved.name}). ({e}) Try describe_location({location!r}) "
-            "to verify the resolved coordinates, or retry in 15 minutes — "
+            f"{resolved.name}). ({e}) Use the describe endpoint or describe tool "
+            f"to verify the resolved coordinates for {location!r}, or retry in 15 minutes — "
             "Open-Meteo's air-quality API can intermittently lag the main "
             "forecast service."
         ) from e
