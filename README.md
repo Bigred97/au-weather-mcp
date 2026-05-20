@@ -1,5 +1,7 @@
 # au-weather-mcp
 
+mcp-name: io.ausdata/au-weather-mcp
+
 [![PyPI](https://img.shields.io/pypi/v/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
 [![Python](https://img.shields.io/pypi/pyversions/au-weather-mcp.svg)](https://pypi.org/project/au-weather-mcp/)
 [![License](https://img.shields.io/pypi/l/au-weather-mcp.svg)](https://github.com/Bigred97/au-weather-mcp/blob/main/LICENSE)

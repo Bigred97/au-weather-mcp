@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.9] - 2026-05-21
+
+### Added — MCP Registry ownership marker
+
+- Add `mcp-name: io.ausdata/au-weather-mcp` to the README so the server can be
+  listed under the verified `io.ausdata` namespace.
+
 ## [0.4.8] - 2026-05-19
 
 ### Improved — transport-agnostic error hints + AST guard test
