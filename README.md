@@ -9,6 +9,8 @@
 
 **Ask Claude about Australian weather and air quality and get real, current numbers** — not "I don't have access to that data." This MCP server gives Claude (and other MCP clients like Cursor) live access to Australian weather + air-quality data via [Open-Meteo](https://open-meteo.com), which aggregates Bureau of Meteorology observations under licence. 45 curated locations (every state capital + every regional centre over ~25k), postcode and place-name lookup, current observations, 16-day forecasts, 80+ years of historical data, and multi-location comparison.
 
+> **Hosted access?** For cross-source queries, webhooks, an always-on REST API, and a uniform response envelope across all 9 sources, see **[ausdata.io](https://ausdata.io)** — free tier available (500 calls/mo, no card).
+
 Companion to [abs-mcp](https://github.com/Bigred97/abs-mcp) (ABS macro stats), [rba-mcp](https://github.com/Bigred97/rba-mcp) (Reserve Bank), and [ato-mcp](https://github.com/Bigred97/ato-mcp) (tax + charity register) — together the four cover Australia's most-asked public data.
 
 ## What you can ask
