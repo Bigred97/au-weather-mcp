@@ -298,6 +298,43 @@ async def test_compare_locations_isolates_unexpected_exception(monkeypatch):
     assert melbourne_row.current is not None
 
 
+async def test_compare_locations_surfaces_stale_signal(monkeypatch):
+    """REGRESSION (trust-contract gap): compare_locations() must not hide a
+    stale-cache fallback the way the other tools (get_weather, air_quality)
+    surface it. Each row's fetch runs inside its own asyncio.gather Task,
+    which gets its OWN COPY of the contextvars.Context — a naive
+    reset_stale_signal()/get_stale_signal() pairing wrapped only around the
+    gather would silently miss staleness raised inside a row's own task.
+    Force the stale signal during one location's fetch and assert it
+    surfaces on the top-level ComparisonResponse."""
+    from au_weather_mcp.client import OpenMeteoClient, _mark_stale
+
+    async def fake_forecast(self, *, latitude, longitude, timezone, **kwargs):
+        payload = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "timezone": timezone,
+            "current": {"time": "2026-05-13T11:00", "temperature_2m": 19.7},
+        }
+        if abs(latitude - (-33.8607)) < 0.01:
+            # Sydney's row: simulate the upstream-5xx-serves-cache path.
+            _mark_stale(
+                "simulated Open-Meteo 503; serving cached payload from "
+                "~5 minute(s) ago"
+            )
+        return payload
+
+    monkeypatch.setattr(OpenMeteoClient, "forecast", fake_forecast)
+
+    resp = await server.compare_locations(["sydney", "melbourne"])
+
+    assert len(resp.locations) == 2
+    assert all(row.error is None for row in resp.locations)
+    assert resp.stale is True, "ComparisonResponse must surface row-level staleness"
+    assert resp.stale_reason, "stale_reason must be non-empty when stale=True"
+    assert "simulated Open-Meteo 503" in resp.stale_reason
+
+
 async def test_air_quality_source_url_round_trips_via_urlencode():
     """REGRESSION (v0.4.0 iter-1 audit): source_url advertised in the
     response must be byte-identical to the URL the client actually hits.

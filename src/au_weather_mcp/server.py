@@ -742,7 +742,20 @@ async def compare_locations(
             "Make multiple calls for larger comparisons."
         )
 
+    reset_stale_signal()
     client = await _get_client()
+
+    # asyncio.gather wraps each coroutine below in its own Task, and each
+    # Task gets its OWN COPY of the current contextvars.Context at creation.
+    # That means _mark_stale() calls inside a gathered fetch mutate that
+    # task's private copy of the ContextVar — they never propagate back to
+    # this outer coroutine's context. Reading get_stale_signal() here after
+    # the gather would therefore silently miss every per-location staleness
+    # event. We work around this by having each row task record its own
+    # (stale, reason) into this shared list (safe without a lock — a single
+    # event loop thread means appends never interleave) and fold those back
+    # into the response after the gather completes.
+    row_stale_signals: list[tuple[bool, str | None]] = []
 
     async def _resolve_and_fetch(loc_input: str) -> ComparisonRow:
         """One row: resolve + fetch + wrap.
@@ -755,6 +768,12 @@ async def compare_locations(
         wrapped as OpenMeteoError, etc.) becomes an error on the row
         rather than crashing the whole call.
         """
+        try:
+            return await _resolve_and_fetch_inner(loc_input)
+        finally:
+            row_stale_signals.append(get_stale_signal())
+
+    async def _resolve_and_fetch_inner(loc_input: str) -> ComparisonRow:
         try:
             resolved = await _resolve(client, loc_input)
         except ValueError as e:
@@ -855,12 +874,28 @@ async def compare_locations(
         )
 
     rows = await asyncio.gather(*(_resolve_and_fetch(loc) for loc in locations))
-    return ComparisonResponse(
+    resp = ComparisonResponse(
         metric="current",
         locations=rows,
         retrieved_at=datetime.now(timezone.utc),
         server_version=__version__,
     )
+    # Fold per-row staleness (captured inside each gathered task's own
+    # context — see _resolve_and_fetch) back into the top-level response,
+    # falling back to this outer context's own signal in case something
+    # outside the gather (e.g. resolution/client setup) went stale. Keep
+    # the FIRST stale reason, matching _mark_stale's "most informative"
+    # convention.
+    stale, reason = get_stale_signal()
+    if not stale:
+        for row_stale, row_reason in row_stale_signals:
+            if row_stale:
+                stale, reason = row_stale, row_reason
+                break
+    if stale:
+        resp.stale = True
+        resp.stale_reason = reason
+    return resp
 
 
 @mcp.tool

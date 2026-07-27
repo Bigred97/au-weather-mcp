@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.4.10] - 2026-07-27
+
+### Fixed — `compare_locations()` silently hid stale-cache fallbacks
+
+`ComparisonResponse` was missing the trust contract carried by every other
+response model (`WeatherResponse`, `AirQualityResponse`): `stale`,
+`stale_reason`, and `source_url`. When Open-Meteo 5xx'd and a location's
+row was served from a stale cached payload, `compare_locations()` returned
+a response that looked completely fresh — a silent-staleness trust
+violation.
+
+- `models.ComparisonResponse` now declares `source_url` (the shared
+  Open-Meteo forecast endpoint), `stale: bool = False`, and
+  `stale_reason: str | None = None`, matching the sibling response models.
+- `server.compare_locations()` now calls `reset_stale_signal()` at entry
+  like every other tool. Because `asyncio.gather` wraps each location's
+  fetch in its own `Task` — and each `Task` gets its own copy of the
+  `contextvars.Context` — a naive reset/read pairing wrapped only around
+  the gather would silently miss staleness raised inside a row's own
+  fetch. Each row task now records its own `(stale, reason)` signal after
+  its fetch completes; these are folded back into the top-level
+  `ComparisonResponse` after the gather finishes, keeping the first
+  (most informative) stale reason across all rows.
+- Added `test_compare_locations_surfaces_stale_signal` (regression) which
+  forces one row's fetch stale and asserts `resp.stale is True` with a
+  non-empty `resp.stale_reason`.
+
 ## [0.4.9] - 2026-05-21
 
 ### Added — MCP Registry ownership marker

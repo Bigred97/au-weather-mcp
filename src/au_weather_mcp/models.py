@@ -299,10 +299,19 @@ class ComparisonRow(BaseModel):
 class ComparisonResponse(BaseModel):
     """Side-by-side weather comparison across N locations. Each ComparisonRow
     has the same shape so agents can iterate cleanly. Failed rows surface
-    an `error` field rather than crashing the whole call."""
+    an `error` field rather than crashing the whole call.
+
+    Same trust contract as WeatherResponse/AirQualityResponse: source_url,
+    attribution, retrieved_at, server_version, stale, stale_reason. Each
+    ComparisonRow also carries its own per-location source_url; this
+    top-level source_url identifies the shared Open-Meteo forecast endpoint
+    used across the fan-out."""
     metric: str  # 'current' is the only metric in v0.4.0; reserved for future
     locations: list[ComparisonRow]
     retrieved_at: datetime
     server_version: str
     source: str = "Open-Meteo (aggregates Bureau of Meteorology data under licence)"
     attribution: str = DEFAULT_ATTRIBUTION
+    source_url: str = "https://api.open-meteo.com/v1/forecast"
+    stale: bool = False
+    stale_reason: str | None = None
