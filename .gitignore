@@ -43,3 +43,4 @@ wheels/
 *.swo
 *~
 uv.lock.bak
+graphify-out/

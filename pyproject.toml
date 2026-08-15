@@ -19,6 +19,7 @@ keywords = [
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -48,8 +49,8 @@ dev = [
 au-weather-mcp = "au_weather_mcp.server:main"
 
 [project.urls]
-Homepage = "https://github.com/Bigred97/au-weather-mcp"
-Documentation = "https://github.com/Bigred97/au-weather-mcp#readme"
+Homepage = "https://ausdata.io"
+Documentation = "https://ausdata.io/sources/au-weather/"
 Repository = "https://github.com/Bigred97/au-weather-mcp"
 Issues = "https://github.com/Bigred97/au-weather-mcp/issues"
 Changelog = "https://github.com/Bigred97/au-weather-mcp/blob/main/CHANGELOG.md"

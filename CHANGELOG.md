@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.10 (2026-08-15) — compare_locations stale-signal trust contract (stale/stale_reason/source_url)
+
+### Changed
+
+- compare_locations stale-signal trust contract (stale/stale_reason/source_url)
+
 ## [0.4.10] - 2026-07-27
 
 ### Fixed — `compare_locations()` silently hid stale-cache fallbacks
